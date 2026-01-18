@@ -42,8 +42,7 @@
             processing: true,
             serverSide: true,
             responsive: true,
-            columns: [
-                {
+            columns: [{
                     data: 'created_at'
                 },
                 {
@@ -58,13 +57,13 @@
                 {
                     data: 'attachment',
                     name: 'attachment',
-                    render: function ( data, type, row, meta ){
-                        if(data !== null){
+                    render: function(data, type, row, meta) {
+                        if (data !== null) {
                             let fileType = data.split(".");
                             if (fileType.at(-1) == 'mp3' || fileType.at(-1) == 'wav') {
-                                return '<audio controls>'+
-                                    '<source src="'+getAttachment(data)+'" type="audio/ogg">'+
-                                '</audio>';
+                                return '<audio controls>' +
+                                    '<source src="' + getAttachment(data) + '" type="audio/ogg">' +
+                                    '</audio>';
                             }
                         } else {
                             return '';
@@ -109,29 +108,28 @@
                     extend: 'print',
                     className: 'btn-sm btn-info',
                     text: '<i class="fas fa-sync"></i> Refresh',
-                    action: function(){
+                    action: function() {
                         reload();
                     }
                 }
             ]
         });
-        function reload()
-        {
+
+        function reload() {
             Table.ajax.reload(null, false);
         }
-        function getAttachment(title)
-        {
+
+        function getAttachment(title) {
             let asset_url = "{{ asset(':attachment') }}";
             return asset_url.replace(':attachment', title);
         }
-        $(document).ready(function() {
-        })
+        $(document).ready(function() {})
     </script>
 @endpush
 @section('content')
     <!--**********************************
-                                    Content body start
-                                ***********************************-->
+                                            Content body start
+                                        ***********************************-->
     <div class="content-body">
 
         <div class="container-fluid">
@@ -142,6 +140,32 @@
                             <div class="card">
                                 <div class="card-body">
                                     <h5 class="card-title">{{ $title }} Table</h5>
+                                    <div class="row justify-content-end mb-3">
+                                        <div class="col-md-10 ml-auto">
+                                            <div class="row">
+                                                <div class="col">
+                                                    <select name="company_id" id="Company" class="form-control mr-2">
+                                                        <option value="HMV">HMV</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col">
+                                                    <div class="input-group mb-3">
+                                                        <input type="date" class="form-control">
+                                                        <div class="input-group-append">
+                                                            <span class="input-group-text">To</span>
+                                                        </div>
+                                                        <input type="date" class="form-control">
+                                                    </div>
+                                                </div>
+                                                <div class="col">
+                                                    <div class="btn-group">
+                                                        <button class="btn btn-primary">Filter</button>
+                                                        <button class="btn btn-danger">Clear</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="table-responsive">
                                         <table class="table table-striped table-bordered" id="daTable">
                                             <thead>
@@ -168,6 +192,6 @@
         <!-- #/ container -->
     </div>
     <!--**********************************
-            Content body end
-        ***********************************-->
+                    Content body end
+                ***********************************-->
 @endsection
