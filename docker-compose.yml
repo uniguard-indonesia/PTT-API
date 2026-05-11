@@ -1,0 +1,26 @@
+services:
+    web-ptt:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: web-ptt:latest
+        container_name: web-ptt
+        volumes:
+            - .:/var/www/app
+        restart: unless-stopped
+        tty: true
+        working_dir: /var/www/app
+        ports:
+            - "${PHP_HOST_PORT}:${PHP_HOST_PORT}"
+
+    nginx-ptt:
+        image: nginx:alpine
+        container_name: nginx-ptt
+        restart: unless-stopped
+        tty: true
+        ports:
+            - "${NGINX_PORT}:${NGINX_PORT}"
+        volumes:
+            - .:/var/www/app
+            - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+            - ./logs/nginx:/var/log/nginx/
