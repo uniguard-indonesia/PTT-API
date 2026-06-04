@@ -1,0 +1,108 @@
+when:
+  event: push
+  branch: production
+
+steps:
+  # -------------------------------------------------------
+  # STEP 1: Build Image langsung di Docker Daemon Lokal VPS
+  # -------------------------------------------------------
+  - name: Build Docker Image
+    image: docker:24-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    commands:
+      # Build menggunakan tag lokal, tidak perlu format ghcr.io lagi
+      - docker build -t ptt-web:latest .
+      - echo "Build image lokal sukses!"
+      # Bersihkan cache dangling image agar storage VPS tetap hemat
+      - docker image prune -f
+
+  # -------------------------------------------------------
+  # STEP 2: Tulis File .env ke Direktori Target VPS
+  # -------------------------------------------------------
+  - name: Prepare Environment File
+    image: alpine
+    volumes:
+      # Pastikan folder ~/ptt-web atau /root/ptt-web sudah di-mount
+      - /root/ptt-web:/root/ptt-web
+    commands:
+      - mkdir -p /root/ptt-web
+      - cd /root/ptt-web
+      # Menggunakan trik $$ seperti yang Anda temukan untuk escaping variabel Woodpecker
+      - |
+        cat > .env << EOF
+        APP_DEBUG=$${APP_DEBUG}
+        APP_ENV=$${APP_ENV}
+        APP_KEY=$${APP_KEY}
+        APP_NAME=$${APP_NAME}
+        APP_URL=$${APP_URL}
+        DB_CONNECTION=$${DB_CONNECTION}
+        DB_HOST=$${DB_HOST}
+        DB_PORT=$${DB_PORT}
+        DB_DATABASE=$${DB_DATABASE}
+        DB_USERNAME=$${DB_USERNAME}
+        DB_PASSWORD=$${DB_PASSWORD}
+        EOF
+      - echo ".env file berhasil dibuat di /root/ptt-web/.env"
+    environment:
+      # Mapping key uppercase ke secret lowercase di Woodpecker UI
+      APP_KEY:
+        from_secret: app_key
+      APP_ENV:
+        from_secret: app_env
+      APP_NAME:
+        from_secret: app_name
+      APP_URL:
+        from_secret: app_url
+      DB_CONNECTION:
+        from_secret: db_connection
+      DB_HOST:
+        from_secret: db_host
+      DB_PORT:
+        from_secret: db_port
+      DB_DATABASE:
+        from_secret: db_database
+      DB_USERNAME:
+        from_secret: db_username
+      DB_PASSWORD:
+        from_secret: db_password
+
+  # -------------------------------------------------------
+  # STEP 3: Tulis docker-compose.yml & Restart Container
+  # -------------------------------------------------------
+  - name: Deploy Container via Docker Compose
+    image: docker:24-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/ptt-web:/root/ptt-web
+    commands:
+      - cd /root/ptt-web
+      # Tulis ulang docker-compose.yml menggunakan image lokal
+      - |
+        cat > docker-compose.yml << 'EOF'
+        services:
+            ptt-web:
+                image: ptt-web:latest
+                container_name: ptt-web
+                volumes:
+                    - ./.env:/var/www/ptt-web/.env:ro
+                    - ./storage:/var/www/ptt-web/storage
+                restart: unless-stopped
+                tty: true
+                working_dir: /var/www/ptt-web
+                environment:
+                    SERVER_NAME: ":8004"
+                    DOCUMENT_ROOT: /var/www/ptt-web/public
+                expose:
+                    - 8004
+                networks:
+                    - web-gateway
+
+        networks:
+            web-gateway:
+                external: true
+        EOF
+      # Restart aplikasi dengan konfigurasi dan image terbaru
+      - docker compose down
+      - docker compose up -d
+      - echo "Deployment successful! Container ptt-web has restarted with the new image and configuration."
