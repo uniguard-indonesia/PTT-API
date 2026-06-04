@@ -1,0 +1,21 @@
+{
+    frankenphp
+    order php_server before file_server
+}
+
+{$SERVER_NAME::8004} {
+    root * {$DOCUMENT_ROOT:/var/www/ptt-web/public}
+    encode zstd br gzip
+
+    # Static assets: serve the file or return 404 — never fall through to PHP
+    # This prevents missing files from triggering a PHP 500 error
+    @staticAssets path /assets/* /favicon.ico /robots.txt
+    handle @staticAssets {
+        file_server
+    }
+
+    # All other requests: route through Laravel (index.php)
+    handle {
+        php_server
+    }
+}
