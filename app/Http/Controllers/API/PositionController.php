@@ -27,16 +27,20 @@ class PositionController extends Controller
     {
         if ($request->has('id_user')) {
             $data = User::with('position')
+                ->join('positions as p', 'p.id', '=', 'users.position_id')
                 ->join('tr_company_users as tcu', 'tcu.user_id', '=', 'users.id')
                 ->join('companies as co', 'co.id', '=', 'tcu.company_id')
                 ->join('timezones as tz', 'tz.id', '=', 'co.timezone_id')
+                ->select('users.*', 'p.*', 'co.name as company_name', 'tz.name as timezone_name')
                 ->find($request->id_user);
         } else {
             $data = User::has('position')
                 ->with('position')
+                ->join('positions as p', 'p.id', '=', 'users.position_id')
                 ->join('tr_company_users as tcu', 'tcu.user_id', '=', 'users.id')
                 ->join('companies as co', 'co.id', '=', 'tcu.company_id')
                 ->join('timezones as tz', 'tz.id', '=', 'co.timezone_id')
+                ->select('users.*', 'p.*', 'co.name as company_name', 'tz.name as timezone_name')
                 ->get();
         }
         return response()->json(
