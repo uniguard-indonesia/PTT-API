@@ -3,7 +3,8 @@
 /public/hot
 /public/storage
 /public/assets/images
-/storage/*.key
+/storage
+/storage/logs/*.log
 /vendor
 .env
 .env.backup
