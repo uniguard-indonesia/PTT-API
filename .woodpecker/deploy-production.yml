@@ -142,6 +142,8 @@ steps:
                   MUMBLE_CONFIG_DB_PORT: $${MUMBLE_DB_PORT}
                   MUMBLE_CONFIG_ICE: tcp -h 127.0.0.1 -p 6502
                   MUMBLE_VERBOSE: 1
+                networks:
+                    - web-gateway
 
         networks:
             web-gateway:
