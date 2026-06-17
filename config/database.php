@@ -91,6 +91,19 @@ return [
             'prefix_indexes' => true,
         ],
 
+        'mumble' => [
+            'driver' => 'pgsql',
+            'host' => env('MUMBLE_DB_HOST', '127.0.0.1'),
+            'port' => env('MUMBLE_DB_PORT', '5432'),
+            'database' => env('MUMBLE_DB_DATABASE', 'ptt_db'),
+            'username' => env('MUMBLE_DB_USERNAME', 'postgres'),
+            'password' => env('MUMBLE_DB_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => env('MUMBLE_DB_PREFIX', ''),
+            'schema' => 'public',
+            'sslmode' => 'prefer',
+        ],
+
     ],
 
     /*
