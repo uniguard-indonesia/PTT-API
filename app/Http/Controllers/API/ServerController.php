@@ -12,7 +12,8 @@ class ServerController extends Controller
     public function index()
     {
         $server = Auth::user()->load('servers.server');
-        return response()->json($server->servers);
+        $uniqueServers = $server->servers->unique('server_id')->values();
+        return response()->json($uniqueServers);
     }
 
     public function show($id)
