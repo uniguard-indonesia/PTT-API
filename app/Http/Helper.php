@@ -15,6 +15,9 @@ class Helper
             case 'reset':
                 $icon = 'ti-key';
                 break;
+            case 'regenerate':
+                $icon = 'ti-reload';
+                break;
         }
         return $icon;
     }
@@ -30,6 +33,9 @@ class Helper
             case 'reset':
                 $color = 'btn-info';
                 break;
+            case 'regenerate':
+                $color = 'btn-warning';
+                break;
         }
         return $color;
     }
@@ -44,6 +50,9 @@ class Helper
                 break;
             case 'reset':
                 $action = 'resetPassword('.$data->id.')';
+                break;
+            case 'regenerate':
+                $action = 'regenerateCert('.$data->id.')';
                 break;
         }
         return $action;

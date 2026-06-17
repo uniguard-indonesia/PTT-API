@@ -51,9 +51,7 @@ class AuthController extends Controller
                         'refresh_token' => $refreshToken, // Tambahkan refresh token ke respons
                         'token_type' => 'Bearer',
                         'name' => $user->name,
-                        'email' => $user->email,
-                        'certificate_path' => $user->certificate->certificate_path,
-                        'servers' => $user->servers->unique('server_id')->values()
+                        'email' => $user->email
                     ],
 
                 ]);
