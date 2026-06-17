@@ -105,7 +105,7 @@ steps:
                 volumes:
                     - ./.env:/var/www/ptt-web/.env:ro
                     - ./storage:/var/www/ptt-web/storage
-                    - ./public:/var/www/ptt-web/public
+                    - ./public/certificates:/var/www/ptt-web/public/certificates
                 restart: unless-stopped
                 tty: true
                 working_dir: /var/www/ptt-web

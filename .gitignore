@@ -1,5 +1,6 @@
 /node_modules
 /logs
+/public/certificates
 /public/hot
 /public/storage
 /public/assets/images
