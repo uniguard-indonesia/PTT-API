@@ -95,6 +95,10 @@ class MumbleService
             // 4. Export to PEM format to extract the DER fingerprint
             openssl_x509_export($x509, $pemCert);
 
+            // Export private key to PEM
+            $privateKeyPem = '';
+            openssl_pkey_export($privateKey, $privateKeyPem, null, $sslConfig);
+
             // 5. Calculate SHA-1 fingerprint of the DER certificate
             $pemBody = str_replace('-----BEGIN CERTIFICATE-----', '', $pemCert);
             $pemBody = str_replace('-----END CERTIFICATE-----', '', $pemBody);
@@ -102,24 +106,20 @@ class MumbleService
             $derCert = base64_decode($pemBody);
             $certHash = sha1($derCert);
 
-            // 6. Export to PKCS12 (.p12) with empty password for ease of client import
-            $p12Data = '';
-            $exportSuccess = openssl_pkcs12_export($x509, $p12Data, $privateKey, '', [
-                'friendly_name' => $user->name
-            ]);
-
-            if (!$exportSuccess) {
-                throw new \Exception("Failed to export PKCS12 certificate: " . openssl_error_string());
-            }
-
-            // 7. Save file to public/certificates/
+            // 6. Export to PKCS12 (.p12) in public/certificates/
             $fileName = 'cert_' . $user->id . '_' . time() . '.p12';
             $dirPath = public_path('certificates');
             if (!file_exists($dirPath)) {
                 mkdir($dirPath, 0755, true);
             }
             $filePath = $dirPath . '/' . $fileName;
-            file_put_contents($filePath, $p12Data);
+
+            // Use the compatible helper method to export PKCS12 file
+            $exportSuccess = self::exportPKCS12($pemCert, $privateKeyPem, $filePath, $user->name);
+
+            if (!$exportSuccess) {
+                throw new \Exception("Failed to export PKCS12 certificate: " . openssl_error_string());
+            }
 
             $relativePath = 'certificates/' . $fileName;
 
@@ -137,6 +137,82 @@ class MumbleService
             Log::error("MumbleService Error for user ID {$user->id}: " . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Export a certificate and private key to PKCS12 (.p12) format.
+     * Generates a compatible output on both OpenSSL 1.1.1 and 3.0+.
+     *
+     * @param string $pemCert
+     * @param string $privateKeyPem
+     * @param string $filePath
+     * @param string $friendlyName
+     * @return bool
+     */
+    private static function exportPKCS12(string $pemCert, string $privateKeyPem, string $filePath, string $friendlyName)
+    {
+        $tempKey = tempnam(sys_get_temp_dir(), 'key');
+        $tempCert = tempnam(sys_get_temp_dir(), 'cert');
+
+        file_put_contents($tempKey, $privateKeyPem);
+        file_put_contents($tempCert, $pemCert);
+
+        $success = false;
+
+        // Try 1: Unencrypted PKCS12 (NONE) - compatible with OpenSSL 1.1.1 & 3.0, no legacy provider needed
+        $cmd = sprintf(
+            'openssl pkcs12 -export -in %s -inkey %s -out %s -name %s -passout pass:"" -keypbe NONE -certpbe NONE -nomac 2>&1',
+            escapeshellarg($tempCert),
+            escapeshellarg($tempKey),
+            escapeshellarg($filePath),
+            escapeshellarg($friendlyName)
+        );
+        @shell_exec($cmd);
+
+        if (file_exists($filePath) && filesize($filePath) > 0) {
+            $success = true;
+        }
+
+        // Try 2: Fallback to explicit legacy options (if Try 1 failed)
+        if (!$success) {
+            $cmdLegacy = sprintf(
+                'openssl pkcs12 -export -in %s -inkey %s -out %s -name %s -passout pass:"" -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 2>&1',
+                escapeshellarg($tempCert),
+                escapeshellarg($tempKey),
+                escapeshellarg($filePath),
+                escapeshellarg($friendlyName)
+            );
+            @shell_exec($cmdLegacy);
+
+            if (file_exists($filePath) && filesize($filePath) > 0) {
+                $success = true;
+            }
+        }
+
+        @unlink($tempKey);
+        @unlink($tempCert);
+
+        // Try 3: Fallback to PHP native openssl_pkcs12_export (if CLI tools failed/disabled)
+        if (!$success) {
+            Log::warning("OpenSSL CLI export failed. Falling back to PHP native openssl_pkcs12_export.");
+            $privateKey = openssl_pkey_get_private($privateKeyPem);
+            $x509 = openssl_x509_read($pemCert);
+            
+            $p12Data = '';
+            $success = openssl_pkcs12_export($x509, $p12Data, $privateKey, '', [
+                'friendly_name' => $friendlyName
+            ]);
+            
+            if ($success) {
+                file_put_contents($filePath, $p12Data);
+            }
+        }
+
+        if ($success) {
+            @chmod($filePath, 0644);
+        }
+
+        return $success;
     }
 
     /**
