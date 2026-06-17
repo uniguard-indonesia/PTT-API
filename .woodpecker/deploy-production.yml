@@ -42,6 +42,12 @@ steps:
         DB_DATABASE=$${DB_DATABASE}
         DB_USERNAME=$${DB_USERNAME}
         DB_PASSWORD=$${DB_PASSWORD}
+        MUMBLE_DB_CONNECTION=$${MUMBLE_DB_CONNECTION}
+        MUMBLE_DB_HOST=$${MUMBLE_DB_HOST}
+        MUMBLE_DB_PORT=$${MUMBLE_DB_PORT}
+        MUMBLE_DB_DATABASE=$${MUMBLE_DB_DATABASE}
+        MUMBLE_DB_USERNAME=$${MUMBLE_DB_USERNAME}
+        MUMBLE_DB_PASSWORD=$${MUMBLE_DB_PASSWORD}
         EOF
       - echo ".env file berhasil dibuat di /root/ptt-web/.env"
     environment:
@@ -66,6 +72,18 @@ steps:
         from_secret: db_username
       DB_PASSWORD:
         from_secret: db_password
+      MUMBLE_DB_CONNECTION:
+        from_secret: mumble_db_connection
+      MUMBLE_DB_HOST:
+        from_secret: mumble_db_host
+      MUMBLE_DB_PORT:
+        from_secret: mumble_db_port
+      MUMBLE_DB_DATABASE:
+        from_secret: mumble_db_database
+      MUMBLE_DB_USERNAME:
+        from_secret: mumble_db_username
+      MUMBLE_DB_PASSWORD:
+        from_secret: mumble_db_password
 
   # -------------------------------------------------------
   # STEP 3: Tulis docker-compose.yml & Restart Container
@@ -97,6 +115,33 @@ steps:
                     - 8004
                 networks:
                     - web-gateway
+            ptt-server:
+                image: mumblevoip/mumble-server:latest
+                container_name: ptt-server
+                hostname: mumble-server
+                restart: on-failure
+                volumes:
+                  - ./log/mumble:/opt/murmur/log
+                  - ./murmur.ini:/etc/murmur.ini
+                  - ./data/mumble:/opt/murmur/data
+                  - ./config:/opt/murmur/config
+                  - ./certs:/opt/murmur/cert
+                ports:
+                  - 64738-64758:64738-64758
+                  - 64738-64758:64738-64758/udp
+                environment:
+                  MUMBLE_CONFIG_WELCOMETEXT: 'Connected to PTT UniGuard!'
+                  MUMBLE_CUSTOM_CONFIG_FILE: "/opt/murmur/murmur.ini"
+                  MUMBLE_SUPERUSER_PASSWORD: Mumble@2026ptt
+                  MUMBLE_CONFIG_DATABASE: $${MUMBLE_DB_DATABASE}
+                  MUMBLE_CONFIG_DB_DRIVER: QPSQL
+                  MUMBLE_CONFIG_DB_USERNAME: $${MUMBLE_DB_USERNAME}
+                  MUMBLE_CONFIG_DB_PASSWORD: $${MUMBLE_DB_PASSWORD}
+                  MUMBLE_CONFIG_DB_HOST: $${MUMBLE_DB_HOST}
+                  MUMBLE_CONFIG_LISTENERSPERCHANNEL: 0
+                  MUMBLE_CONFIG_DB_PORT: $${MUMBLE_DB_PORT}
+                  MUMBLE_CONFIG_ICE: tcp -h 127.0.0.1 -p 6502
+                  MUMBLE_VERBOSE: 1
 
         networks:
             web-gateway:
@@ -106,3 +151,14 @@ steps:
       - docker compose down
       - docker compose up -d
       - echo "Deployment successful! Container ptt-web has restarted with the new image and configuration."
+    environment:
+      MUMBLE_CONFIG_DATABASE:
+        from_secret: mumble_db_database
+      MUMBLE_DB_USERNAME:
+        from_secret: mumble_db_username
+      MUMBLE_DB_PASSWORD:
+        from_secret: mumble_db_password
+      MUMBLE_DB_HOST:
+        from_secret: mumble_db_host
+      MUMBLE_DB_PORT:
+        from_secret: mumble_db_port

@@ -12,6 +12,26 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    protected static function booted()
+    {
+        static::created(function ($user) {
+            \App\Services\MumbleService::generateAndRegister($user);
+        });
+
+        static::deleting(function ($user) {
+            if ($user->certificate) {
+                $filePath = public_path($user->certificate->certificate_path);
+                if (file_exists($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+        });
+
+        static::deleted(function ($user) {
+            \App\Services\MumbleService::deregisterUserFromMumble($user);
+        });
+    }
+
     /**
      * The attributes that are mass assignable.
      *
