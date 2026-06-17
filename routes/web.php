@@ -38,6 +38,7 @@ Route::middleware('auth')->group(function(){
         //User
         Route::resource('user', UserController::class)->only(['index', 'store', 'edit', 'update', 'destroy']);
         Route::put('user/{id}/reset', [UserController::class, 'reset'])->name('user.reset');
+        Route::post('user/{id}/regenerate-certificate', [UserController::class, 'regenerateCertificate'])->name('user.regenerate-certificate');
         
         //Server
         Route::resource('server', ServerController::class)->only(['index', 'store', 'edit', 'update', 'destroy']);

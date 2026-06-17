@@ -13,7 +13,11 @@ class ServerController extends Controller
     {
         $server = Auth::user()->load('servers.server');
         $uniqueServers = $server->servers->unique('server_id')->values();
-        return response()->json($uniqueServers);
+        return response()->json([
+            'success' => true,
+            'message' => 'Server list successfully fetched',
+            'data' => $uniqueServers
+        ]);
     }
 
     public function show($id)

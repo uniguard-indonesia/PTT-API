@@ -161,6 +161,46 @@
             $('#resetModal').modal('show');
         }
 
+        function regenerateCert(id) {
+            let regenUrl = "{{ route('admin.user.regenerate-certificate', ':id') }}";
+            regenUrl = regenUrl.replace(':id', id);
+            swal({
+                title: 'Regenerate Certificate?',
+                text: "This will create a new certificate for the user and register it to Mumble.",
+                type: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Regenerate',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#ff9800',
+                reverseButtons: true
+            }).then((isConfirm) => {
+                if (isConfirm.value) {
+                    swal({
+                        title: 'Please Wait...',
+                        text: 'Generating certificate...',
+                        allowOutsideClick: false,
+                        onOpen: () => {
+                            swal.showLoading();
+                        }
+                    });
+                    $.ajax({
+                        url: regenUrl,
+                        type: "POST",
+                        dataType: "JSON",
+                        success: function(response) {
+                            swal.close();
+                            notification(response.status, response.message);
+                            Table.ajax.reload(null, false);
+                        },
+                        error: function(res) {
+                            swal.close();
+                            notification(res.responseJSON.status, res.responseJSON.message);
+                        }
+                    })
+                }
+            })
+        }
+
         function destroy(id) {
             let deleteUrl = "{{ route('admin.user.destroy', ':id') }}";
             deleteUrl = deleteUrl.replace(':id', id);
