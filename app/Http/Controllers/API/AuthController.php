@@ -53,7 +53,7 @@ class AuthController extends Controller
                         'name' => $user->name,
                         'email' => $user->email,
                         'certificate_path' => $user->certificate->certificate_path,
-                        'servers' => $user->servers
+                        'servers' => $user->servers->unique('server_id')->values()
                     ],
 
                 ]);
@@ -109,4 +109,46 @@ class AuthController extends Controller
         ]);
     }
 
+    public function downloadCertificate(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+
+            // Self-healing: Ensure a certificate exists for this user
+            if (!$user->certificate) {
+                \App\Services\MumbleService::generateAndRegister($user);
+                $user->load('certificate');
+            }
+
+            $certificate = $user->certificate;
+            $filePath = public_path($certificate->certificate_path);
+
+            if (!file_exists($filePath)) {
+                // Try to regenerate if database record exists but file was deleted
+                \App\Services\MumbleService::generateAndRegister($user);
+                $user->load('certificate');
+                $certificate = $user->certificate;
+                $filePath = public_path($certificate->certificate_path);
+            }
+
+            if (file_exists($filePath)) {
+                return response()->download($filePath, basename($filePath), [
+                    'Content-Type' => 'application/x-pkcs12',
+                ]);
+            }
+
+            return response()->json(['message' => 'Certificate file could not be generated.'], 500);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to download certificate: ' . $th->getMessage()
+            ], 500);
+        }
+    }
+
 }
+

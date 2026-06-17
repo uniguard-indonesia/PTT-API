@@ -105,6 +105,7 @@ steps:
                 volumes:
                     - ./.env:/var/www/ptt-web/.env:ro
                     - ./storage:/var/www/ptt-web/storage
+                    - ./public:/var/www/ptt-web/public
                 restart: unless-stopped
                 tty: true
                 working_dir: /var/www/ptt-web
@@ -127,7 +128,7 @@ steps:
                   - ./config:/opt/murmur/config
                   - ./certs:/opt/murmur/cert
                 ports:
-                  - 64738-64758:64738-64758
+                  - 64738-64758:64738-64758/tcp
                   - 64738-64758:64738-64758/udp
                 environment:
                   MUMBLE_CONFIG_WELCOMETEXT: 'Connected to PTT UniGuard!'
@@ -140,7 +141,7 @@ steps:
                   MUMBLE_CONFIG_DB_HOST: $${MUMBLE_DB_HOST}
                   MUMBLE_CONFIG_LISTENERSPERCHANNEL: 0
                   MUMBLE_CONFIG_DB_PORT: $${MUMBLE_DB_PORT}
-                  MUMBLE_CONFIG_ICE: tcp -h 127.0.0.1 -p 6502
+                  MUMBLE_CONFIG_ICE: tcp -h 0.0.0.0 -p 6502
                   MUMBLE_VERBOSE: 1
                 networks:
                     - web-gateway
