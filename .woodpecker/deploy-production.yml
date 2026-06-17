@@ -97,6 +97,33 @@ steps:
                     - 8004
                 networks:
                     - web-gateway
+            ptt-server:
+                image: mumblevoip/mumble-server:latest
+                container_name: ptt-server
+                hostname: mumble-server
+                restart: on-failure
+                volumes:
+                  - ./log/mumble:/opt/murmur/log
+                  - ./murmur.ini:/etc/murmur.ini
+                  - ./data/mumble:/opt/murmur/data
+                  - ./config:/opt/murmur/config
+                  - ./certs:/opt/murmur/cert
+                ports:
+                  - 64738-64758:64738-64758
+                  - 64738-64758:64738-64758/udp
+                environment:
+                  MUMBLE_CONFIG_WELCOMETEXT: 'Connected to PTT UniGuard!'
+                  MUMBLE_CUSTOM_CONFIG_FILE: "/opt/murmur/murmur.ini"
+                  MUMBLE_SUPERUSER_PASSWORD: Mumble@2026ptt
+                  MUMBLE_CONFIG_DATABASE: ptt_db
+                  MUMBLE_CONFIG_DB_DRIVER: QPSQL
+                  MUMBLE_CONFIG_DB_USERNAME: postgres
+                  MUMBLE_CONFIG_DB_PASSWORD: Un19uArd@2026PTT
+                  MUMBLE_CONFIG_DB_HOST: pgbouncer
+                  MUMBLE_CONFIG_LISTENERSPERCHANNEL: 0
+                  MUMBLE_CONFIG_DB_PORT: 6432
+                  MUMBLE_CONFIG_ICE: tcp -h 127.0.0.1 -p 6502
+                  MUMBLE_VERBOSE: 1
 
         networks:
             web-gateway:

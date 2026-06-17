@@ -151,7 +151,8 @@ class UserController extends Controller
             }
             $create = User::create($input);
             if ($create) {
-                $this->__insertCertificate($create->id);
+                // Automatically generated and registered to Mumble in User's booted event (via MumbleService)
+                // $this->__insertCertificate($create->id);
                 return response()->json(
                     [
                         'status' => 'success',
