@@ -97,7 +97,7 @@ class UserController extends Controller
                     return $row->level?$row->level->name:'UNKNOWN';
                 })
                 ->addColumn('action', function ($row) {
-                    return Helper::actionButtons($row, ['reset', 'edit', 'delete']);
+                    return Helper::actionButtons($row, ['reset', 'regenerate', 'edit', 'delete']);
                 })
                 ->rawColumns(['action'])
                 ->make(true);
@@ -316,5 +316,31 @@ class UserController extends Controller
                 404
             );
         }
+    }
+
+    public function regenerateCertificate($id)
+    {
+        $user = User::find($id);
+        if (!$user) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        // Call generateAndRegister to create new certificate and sync it to Mumble
+        $success = \App\Services\MumbleService::generateAndRegister($user);
+
+        if ($success) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Certificate regenerated and registered successfully'
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to regenerate certificate'
+        ], 500);
     }
 }
