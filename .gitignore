@@ -5,7 +5,8 @@
 /public/storage
 /public/assets/images
 /storage
-/storage/logs/*.log
+/storage/framework
+/storage/logs
 /vendor
 .env
 .env.backup
