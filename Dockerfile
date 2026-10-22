@@ -1,4 +1,4 @@
-FROM dunglas/frankenphp:latest-php8.3-alpine
+FROM dunglas/frankenphp:php8.3-alpine
 
 # System libraries required by PHP extensions
 RUN apk add --no-cache \
