@@ -10,6 +10,7 @@ use App\Models\ServerCompany;
 use App\Models\TrServerUsers;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Yajra\DataTables\DataTables;
 
@@ -25,34 +26,65 @@ class ServerController extends Controller
         $result = [];
         foreach ($companies as $idx => $row) {
             $result[] = [
-                'server_id' => $server_id,
-                'company_id' => $row
+                "server_id" => $server_id,
+                "company_id" => $row,
             ];
         }
         if ($update) {
-            ServerCompany::where('server_id', $server_id)->delete();
+            ServerCompany::where("server_id", $server_id)->delete();
         }
         ServerCompany::insert($result);
         return true;
     }
+
+    private function findAuthorizedServer($id, array $with = [])
+    {
+        return Server::when(!empty($with), function ($query) use ($with) {
+            $query->with($with);
+        })
+            ->when(Auth::user()->level_id != 0, function ($query) {
+                $query->whereHas("companies", function ($q) {
+                    $q->where("company_id", Auth::user()->company_id);
+                });
+            })
+            ->find($id);
+    }
+
     public function index(Request $request)
     {
         if ($request->wantsJson()) {
-            $data = Server::all();
+            $data = Server::when(Auth::user()->level_id != 0, function ($q) {
+                $q->whereHas("companies", function ($query) {
+                    $query->where("company_id", Auth::user()->company_id);
+                });
+            })->get();
+
             return DataTables::of($data)
                 ->addIndexColumn()
-                ->addColumn('action', function ($row) {
-                    return Helper::actionButtons($row, ['edit', 'delete']);
+                ->addColumn("action", function ($row) {
+                    if ((int) Auth::user()->level_id !== 0) {
+                        return '<span class="badge badge-secondary">Read Only</span>';
+                    }
+                    return Helper::actionButtons($row, ["edit", "delete"]);
                 })
-                ->rawColumns(['action'])
+                ->rawColumns(["action"])
                 ->make(true);
         } else {
             $data = [
-                'title' => 'Server List | PTT UniGuard',
-                'companies' => Company::all(),
-                'users' => User::all()
+                "title" => "Server List | PTT UniGuard",
+                "companies" => Company::when(
+                    Auth::user()->level_id != 0,
+                    function ($q) {
+                        $q->where("id", Auth::user()->company_id);
+                    },
+                )->get(),
+                "users" => User::when(Auth::user()->level_id != 0, function (
+                    $q,
+                ) {
+                    $q->where("company_id", Auth::user()->company_id);
+                })->get(),
             ];
-            return view('pages.admin.server', $data);
+            return view("pages.admin.server", $data);
         }
     }
 
@@ -74,33 +106,64 @@ class ServerController extends Controller
      */
     public function store(Request $request)
     {
+        if ((int) Auth::user()->level_id !== 0) {
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "Unauthorized. Server configuration is read-only for company administrators.",
+                ],
+                403,
+            );
+        }
         $input = $request->only([
-            'name', 'host', 'port',
-            'user_id', 'username', 'password'
+            "name",
+            "host",
+            "port",
+            "user_id",
+            "username",
+            "password",
         ]);
-        $validator = Validator::make($input, Server::rules(), [], Server::attributes());
+        $validator = Validator::make(
+            $input,
+            Server::rules(),
+            [],
+            Server::attributes(),
+        );
         if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Bad input value',
-                'errors' => $validator->errors()
-            ], 400);
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "Bad input value",
+                    "errors" => $validator->errors(),
+                ],
+                400,
+            );
         } else {
-            if ($request->input('password') == '') {
-                $input['password'] = (string)"";
+            if ($request->input("password") == "") {
+                $input["password"] = (string) "";
             }
             $create = Server::create($input);
             if ($create) {
-                $this->__insertCompanies($request->companies, $create->id);
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Server create successfully',
-                ], 200);
+                $companies =
+                    Auth::user()->level_id != 0
+                        ? [Auth::user()->company_id]
+                        : $request->companies ?? [];
+                $this->__insertCompanies($companies, $create->id);
+                return response()->json(
+                    [
+                        "status" => "success",
+                        "message" => "Server create successfully",
+                    ],
+                    200,
+                );
             } else {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'internal server error',
-                ], 500);
+                return response()->json(
+                    [
+                        "status" => "error",
+                        "message" => "internal server error",
+                    ],
+                    500,
+                );
             }
         }
     }
@@ -124,19 +187,25 @@ class ServerController extends Controller
      */
     public function edit($id)
     {
-        $data = Server::with('companies')->find($id);
+        $data = $this->findAuthorizedServer($id, ["companies"]);
         if ($data) {
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Server retrieved successfully',
-                'data' => $data
-            ], 200);
+            return response()->json(
+                [
+                    "status" => "success",
+                    "message" => "Server retrieved successfully",
+                    "data" => $data,
+                ],
+                200,
+            );
         } else {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Server not exist',
-                'data' => $data
-            ], 404);
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "Server not exist",
+                    "data" => $data,
+                ],
+                404,
+            );
         }
     }
 
@@ -149,36 +218,67 @@ class ServerController extends Controller
      */
     public function update(Request $request, $id)
     {
+        if ((int) Auth::user()->level_id !== 0) {
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "Unauthorized. Server configuration is read-only for company administrators.",
+                ],
+                403,
+            );
+        }
         $input = $request->only([
-            'name', 'host', 'port',
-            'user_id', 'username', 'password'
+            "name",
+            "host",
+            "port",
+            "user_id",
+            "username",
+            "password",
         ]);
-        $validator = Validator::make($input, Server::rules(), [], Server::attributes());
+        $validator = Validator::make(
+            $input,
+            Server::rules(),
+            [],
+            Server::attributes(),
+        );
         if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Bad input value',
-                'errors' => $validator->errors()
-            ], 400);
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "Bad input value",
+                    "errors" => $validator->errors(),
+                ],
+                400,
+            );
         } else {
-            $data = Server::find($id);
-            if ($request->input('password') == '') {
-                $input['password'] = (string)"";
+            $data = $this->findAuthorizedServer($id);
+            if ($request->input("password") == "") {
+                $input["password"] = (string) "";
             }
             if ($data) {
                 $data->update($input);
-                $this->__insertCompanies($request->companies, $id, true);
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Server updated successfully',
-                    'data' => $data
-                ], 200);
+                $companies =
+                    Auth::user()->level_id != 0
+                        ? [Auth::user()->company_id]
+                        : $request->companies ?? [];
+                $this->__insertCompanies($companies, $id, true);
+                return response()->json(
+                    [
+                        "status" => "success",
+                        "message" => "Server updated successfully",
+                        "data" => $data,
+                    ],
+                    200,
+                );
             } else {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Server not exist',
-                    'data' => $data
-                ], 404);
+                return response()->json(
+                    [
+                        "status" => "error",
+                        "message" => "Server not exist",
+                        "data" => $data,
+                    ],
+                    404,
+                );
             }
         }
     }
@@ -191,18 +291,33 @@ class ServerController extends Controller
      */
     public function destroy($id)
     {
-        $data = Server::find($id);
+        if ((int) Auth::user()->level_id !== 0) {
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "Unauthorized. Server configuration is read-only for company administrators.",
+                ],
+                403,
+            );
+        }
+        $data = $this->findAuthorizedServer($id);
         if ($data) {
             $data->delete();
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Server deleted successfully'
-            ], 200);
+            return response()->json(
+                [
+                    "status" => "success",
+                    "message" => "Server deleted successfully",
+                ],
+                200,
+            );
         } else {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Server not exist'
-            ], 404);
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "Server not exist",
+                ],
+                404,
+            );
         }
     }
 }
