@@ -60,8 +60,8 @@
             "Google Terrain": googleTerrain
         };
         var map = L.map('map', {
-            center: [-6.848569, 107.5202047],
-            zoom: 13,
+            center: [-25.2744, 133.7751],
+            zoom: 4,
             layers: [osmTile, googleTile]
         });
         var layerControl = L.control.layers(baseMaps).addTo(map);
@@ -134,6 +134,7 @@
                                         </div>
                                     </div>
                                 </div>
+                                @if (isset($countServer) && $countServer !== null)
                                 <div class="col-sm-4 b-r-default p-b-20 p-t-20">
                                     <div class="row align-items-center text-center">
                                         <div class="col-4 p-r-0">
@@ -141,10 +142,11 @@
                                         </div>
                                         <div class="col-8 p-l-0">
                                             <h5>{{ $countServer }}</h5>
-                                            <p class="text-muted m-b-0">Server</p>
+                                            <p class="text-muted m-b-0">{{ Auth::user()->level_id == 0 ? 'Server' : 'Assigned Server' }}</p>
                                         </div>
                                     </div>
                                 </div>
+                                @endif
                             </div>
                         </div>
                     </div>

@@ -23,95 +23,119 @@ class UserController extends Controller
      * @return \Illuminate\Http\Response
      */
     protected $rules = [
-        'name' => 'required',
-        'email' => 'email|required',
-        'company_id' => 'required',
-        'level_id' => 'required',
-
+        "name" => "required",
+        "email" => "email|required",
+        "company_id" => "required",
+        "level_id" => "required",
     ];
     private function __uploadCertificate($file, $user_id)
     {
         // Buat path penyimpanan dengan nama file asli
         $fileName = $file->getClientOriginalName();
         // $path = $file->storeAs('certificates', $fileName);
-        $file->move(public_path('certificates/'), $fileName);
-        $certificate = Certificate::where('user_id', $user_id);
+        $file->move(public_path("certificates/"), $fileName);
+        $certificate = Certificate::where("user_id", $user_id);
         if ($certificate->count() > 0) {
             // Hapus file sertifikat lama
             // Storage::delete($certificate->certificate_path);
-            unlink(public_path('certificates/') . $fileName);
+            unlink(public_path("certificates/") . $fileName);
             // Update sertifikat dengan path baru
             $certificate->update([
-                'certificate_path' => 'certificates/' . $fileName,
+                "certificate_path" => "certificates/" . $fileName,
             ]);
         } else {
             // Buat entri sertifikat baru
             Certificate::create([
-                'user_id' => $user_id,
-                'certificate_path' => 'certificates/' . $fileName,
+                "user_id" => $user_id,
+                "certificate_path" => "certificates/" . $fileName,
             ]);
         }
     }
     private function __insertCertificate($user_id)
     {
-        if (in_array(Auth::user()->company_id, [1,2])) {
-            $cert = 'certificates/ptt.device.p12';
+        if (in_array(Auth::user()->company_id, [1, 2])) {
+            $cert = "certificates/ptt.device.p12";
         } else {
-            $cert = 'certificates/clientgroup.p12';
+            $cert = "certificates/clientgroup.p12";
         }
         Certificate::create([
-            'user_id' => $user_id,
-            'certificate_path' => $cert,
+            "user_id" => $user_id,
+            "certificate_path" => $cert,
         ]);
     }
-    private function  __uploadPhoto($file, $exist = false){
-        $fileName = time().'.'.$file->getClientOriginalExtension();
-        $file->move(public_path('dist/profiles/'), $fileName);
+    private function __uploadPhoto($file, $exist = false)
+    {
+        $fileName = time() . "." . $file->getClientOriginalExtension();
+        $file->move(public_path("dist/profiles/"), $fileName);
         if ($exist) {
-            unlink(public_path('dist/profiles/') . $exist);
+            unlink(public_path("dist/profiles/") . $exist);
         }
         return $fileName;
     }
     private function getTimezoneCode()
     {
-        return Auth::user()->company?Auth::user()->company->timezone->code:'UTC';
+        return Auth::user()->company
+            ? Auth::user()->company->timezone->code
+            : "UTC";
+    }
+    private function findAuthorizedUser($id, array $with = [])
+    {
+        return User::when(!empty($with), function ($query) use ($with) {
+            $query->with($with);
+        })
+            ->when(Auth::user()->level_id != 0, function ($query) {
+                $query->where("company_id", Auth::user()->company_id);
+            })
+            ->find($id);
     }
     public function index(Request $request)
     {
         if ($request->wantsJson()) {
-            $user = User::with('company', 'level')
-                ->when(Auth::user()->level_id != 0, function($q){
-                    $q->where('company_id', Auth::user()->company_id);
+            $user = User::with("company", "level")
+                ->when(Auth::user()->level_id != 0, function ($q) {
+                    $q->where("company_id", Auth::user()->company_id);
                 })
                 ->latest()
                 ->get();
             return DataTables::of($user)
                 ->addIndexColumn()
-                ->editColumn('created_at', function($row){
-                    return Carbon::parse(strtotime($row->created_at))->setTimezone($this->getTimezoneCode())->isoFormat('DD MMM Y HH:mm z');
+                ->editColumn("created_at", function ($row) {
+                    return Carbon::parse(strtotime($row->created_at))
+                        ->setTimezone($this->getTimezoneCode())
+                        ->isoFormat("DD MMM Y HH:mm z");
                 })
-                ->editColumn('company', function ($row) {
-                    return $row->company?$row->company->name:'UNKNOWN';
+                ->editColumn("company", function ($row) {
+                    return $row->company ? $row->company->name : "UNKNOWN";
                 })
-                ->editColumn('level', function ($row) {
-                    return $row->level?$row->level->name:'UNKNOWN';
+                ->editColumn("level", function ($row) {
+                    return $row->level ? $row->level->name : "UNKNOWN";
                 })
-                ->addColumn('action', function ($row) {
-                    return Helper::actionButtons($row, ['reset', 'regenerate', 'edit', 'delete']);
+                ->addColumn("action", function ($row) {
+                    return Helper::actionButtons($row, [
+                        "reset",
+                        "regenerate",
+                        "edit",
+                        "delete",
+                    ]);
                 })
-                ->rawColumns(['action'])
+                ->rawColumns(["action"])
                 ->make(true);
         } else {
             $data = [
-                'title' => 'User',
-                'levels' => Level::when(Auth::user()->level_id != 0, function($q){
-                    $q->where('id', '<>', 1);
+                "title" => "User",
+                "levels" => Level::when(Auth::user()->level_id != 0, function (
+                    $q,
+                ) {
+                    $q->where("id", "<>", 1);
                 })->get(),
-                'companies' => Company::when(Auth::user()->level_id != 0, function($q){
-                    $q->where('id', Auth::user()->company_id);
-                })->get(),
+                "companies" => Company::when(
+                    Auth::user()->level_id != 0,
+                    function ($q) {
+                        $q->where("id", Auth::user()->company_id);
+                    },
+                )->get(),
             ];
-            return view('pages.admin.user', $data);
+            return view("pages.admin.user", $data);
         }
     }
 
@@ -133,21 +157,31 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-        $input = $request->only(['company_id', 'name', 'email', 'level_id', 'password', 'certificate']);
-        $this->rules['password'] = 'required';
+        $input = $request->only([
+            "company_id",
+            "name",
+            "email",
+            "level_id",
+            "password",
+            "certificate",
+        ]);
+        if (Auth::user()->level_id != 0) {
+            $input["company_id"] = Auth::user()->company_id;
+        }
+        $this->rules["password"] = "required";
         $validator = Validator::make($input, $this->rules, [], []);
         if ($validator->fails()) {
             return response()->json(
                 [
-                    'status' => 'error',
-                    'errors' => $validator->errors(),
+                    "status" => "error",
+                    "errors" => $validator->errors(),
                 ],
-                400
+                400,
             );
         } else {
-            $input['password'] = Hash::make($request->password);
-            if ($request->has('photo')) {
-                $input['photo'] = $this->__uploadPhoto($request->photo);
+            $input["password"] = Hash::make($request->password);
+            if ($request->has("photo")) {
+                $input["photo"] = $this->__uploadPhoto($request->photo);
             }
             $create = User::create($input);
             if ($create) {
@@ -155,18 +189,18 @@ class UserController extends Controller
                 // $this->__insertCertificate($create->id);
                 return response()->json(
                     [
-                        'status' => 'success',
-                        'message' => 'User created successfully',
+                        "status" => "success",
+                        "message" => "User created successfully",
                     ],
-                    200
+                    200,
                 );
             } else {
                 return response()->json(
                     [
-                        'status' => 'error',
-                        'message' => 'internal server error',
+                        "status" => "error",
+                        "message" => "internal server error",
                     ],
-                    500
+                    500,
                 );
             }
         }
@@ -180,27 +214,27 @@ class UserController extends Controller
      */
     public function reset($id, Request $request)
     {
-        $data = User::find($id);
+        $data = $this->findAuthorizedUser($id);
         if ($data) {
             $input = [
-                'password' => Hash::make($request->new_password),
+                "password" => Hash::make($request->new_password),
             ];
             $data->update($input);
             return response()->json(
                 [
-                    'status' => 'success',
-                    'message' => 'Reset password successfully',
-                    'data' => $data,
+                    "status" => "success",
+                    "message" => "Reset password successfully",
+                    "data" => $data,
                 ],
-                200
+                200,
             );
         } else {
             return response()->json(
                 [
-                    'status' => 'error',
-                    'message' => 'Data not exist',
+                    "status" => "error",
+                    "message" => "Data not exist",
                 ],
-                404
+                404,
             );
         }
     }
@@ -213,23 +247,23 @@ class UserController extends Controller
      */
     public function edit($id)
     {
-        $data = User::with('servers.server')->find($id);
+        $data = $this->findAuthorizedUser($id, ["servers.server"]);
         if ($data) {
             return response()->json(
                 [
-                    'status' => 'success',
-                    'message' => 'Data retrieved successfully',
-                    'data' => $data,
+                    "status" => "success",
+                    "message" => "Data retrieved successfully",
+                    "data" => $data,
                 ],
-                200
+                200,
             );
         } else {
             return response()->json(
                 [
-                    'status' => 'error',
-                    'message' => 'Data not exist',
+                    "status" => "error",
+                    "message" => "Data not exist",
                 ],
-                404
+                404,
             );
         }
     }
@@ -243,38 +277,47 @@ class UserController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $input = $request->only(['company_id', 'name', 'email', 'certificate', 'level_id']);
+        $input = $request->only([
+            "company_id",
+            "name",
+            "email",
+            "certificate",
+            "level_id",
+        ]);
+        if (Auth::user()->level_id != 0) {
+            $input["company_id"] = Auth::user()->company_id;
+        }
         $validator = Validator::make($input, $this->rules, [], []);
         if ($validator->fails()) {
             return response()->json(
                 [
-                    'status' => 'error',
-                    'errors' => $validator->errors(),
+                    "status" => "error",
+                    "errors" => $validator->errors(),
                 ],
-                400
+                400,
             );
         } else {
-            $data = User::find($id);
+            $data = $this->findAuthorizedUser($id);
             if ($data) {
-                if ($request->has('photo')) {
-                    $input['photo'] = $this->__uploadPhoto($request->photo);
+                if ($request->has("photo")) {
+                    $input["photo"] = $this->__uploadPhoto($request->photo);
                 }
                 $data->update($input);
                 return response()->json(
                     [
-                        'status' => 'success',
-                        'message' => 'Data updated successfully',
-                        'data' => $data,
+                        "status" => "success",
+                        "message" => "Data updated successfully",
+                        "data" => $data,
                     ],
-                    200
+                    200,
                 );
             } else {
                 return response()->json(
                     [
-                        'status' => 'error',
-                        'message' => 'Data not exist',
+                        "status" => "error",
+                        "message" => "Data not exist",
                     ],
-                    404
+                    404,
                 );
             }
         }
@@ -288,12 +331,12 @@ class UserController extends Controller
      */
     public function destroy($id)
     {
-        $data = User::with('certificate')->find($id);
+        $data = $this->findAuthorizedUser($id, ["certificate"]);
         if ($data) {
             if ($data->certificate) {
                 if (
                     file_exists(
-                        public_path($data->certificate->certificate_path)
+                        public_path($data->certificate->certificate_path),
                     )
                 ) {
                     unlink(public_path($data->certificate->certificate_path));
@@ -302,30 +345,33 @@ class UserController extends Controller
             $data->delete();
             return response()->json(
                 [
-                    'status' => 'success',
-                    'message' => 'Data deleted successfully',
+                    "status" => "success",
+                    "message" => "Data deleted successfully",
                 ],
-                200
+                200,
             );
         } else {
             return response()->json(
                 [
-                    'status' => 'error',
-                    'message' => 'Data not exist',
+                    "status" => "error",
+                    "message" => "Data not exist",
                 ],
-                404
+                404,
             );
         }
     }
 
     public function regenerateCertificate($id)
     {
-        $user = User::find($id);
+        $user = $this->findAuthorizedUser($id);
         if (!$user) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'User not found'
-            ], 404);
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "User not found",
+                ],
+                404,
+            );
         }
 
         // Call generateAndRegister to create new certificate and sync it to Mumble
@@ -333,14 +379,18 @@ class UserController extends Controller
 
         if ($success) {
             return response()->json([
-                'status' => 'success',
-                'message' => 'Certificate regenerated and registered successfully'
+                "status" => "success",
+                "message" =>
+                    "Certificate regenerated and registered successfully",
             ]);
         }
 
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Failed to regenerate certificate'
-        ], 500);
+        return response()->json(
+            [
+                "status" => "error",
+                "message" => "Failed to regenerate certificate",
+            ],
+            500,
+        );
     }
 }

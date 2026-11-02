@@ -286,7 +286,7 @@
                         <div class="form-group">
                             <label for="Menu" class="col-form-label">Menu*</label>
                             <select name="menu[]" id="Menu" class="form-control" multiple>
-                                @foreach (collect(config('sidebar.menu'))->where('title', '<>','Master Data')->all() as $item)
+                                @foreach (collect(config('sidebar.menu'))->whereNotIn('title', ['Master Data', 'Company'])->all() as $item)
                                     <option value="{{ $item['title'] }}">{{ $item['title'] }}</option>
                                 @endforeach
                             </select>

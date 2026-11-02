@@ -121,6 +121,9 @@
             url = "{{ route('admin.server.store') }}";
             method = 'POST';
             $('.modal-header h5').html("Create Server");
+            @if (Auth::user()->level_id != 0)
+                $('#Companies').selectpicker('val', ['{{ Auth::user()->company_id }}']);
+            @endif
             $('#basicModal').modal('show');
         }
 
@@ -137,6 +140,11 @@
                 $.each(res.data.companies, function(idx, item) {
                     companies.push(item.id);
                 })
+                @if (Auth::user()->level_id != 0)
+                    if (companies.length === 0) {
+                        companies = ['{{ Auth::user()->company_id }}'];
+                    }
+                @endif
                 $('#Companies').selectpicker('val', companies);
                 $('input[name="name"]').val(res.data.name);
                 $('input[name="username"]').val(res.data.username);
@@ -216,7 +224,11 @@
         $(document).ready(function() {
             $('#basicModal').on('hide.bs.modal', function() {
                 $('.modal-body form')[0].reset();
-                $('#Companies').selectpicker('val', '');
+                @if (Auth::user()->level_id != 0)
+                    $('#Companies').selectpicker('val', ['{{ Auth::user()->company_id }}']);
+                @else
+                    $('#Companies').selectpicker('val', '');
+                @endif
                 $('input[name="_method"]').remove();
             })
             $('#Companies').selectpicker({
@@ -268,8 +280,10 @@
                             <div class="card">
                                 <div class="card-body">
                                     <h5 class="card-title">Server Table</h5>
+                                    @if(Auth::user()->level_id == 0)
                                     <button class="btn btn-sm btn-primary float-right" onclick="create()"><i
                                             class="fas fa-plus me-1"></i> Server</button>
+                                    @endif
                                     <div class="table-responsive">
                                         <table class="table table-striped table-bordered" id="daTable">
                                             <thead>
@@ -347,7 +361,7 @@
                                 <label for="Companies">Companies*</label>
                                 <select name="companies[]" id="Companies" class="form-control" multiple required>
                                     @foreach ($companies as $item)
-                                        <option value="{{ $item->id }}">{{ $item->name }}</option>
+                                        <option value="{{ $item->id }}" {{ Auth::user()->level_id != 0 ? 'selected' : '' }}>{{ $item->name }}</option>
                                     @endforeach
                                 </select>
                             </div>
