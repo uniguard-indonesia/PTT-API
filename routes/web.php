@@ -21,35 +21,77 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', [AuthController::class, 'index'])->name('auth');
-Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
+Route::get("/", [AuthController::class, "index"])->name("auth");
+Route::post("/login", [AuthController::class, "login"])->name("auth.login");
 
-Route::middleware('auth')->group(function(){
-    Route::get('/logout', [AuthController::class, 'logout'])->name('auth.logout');
+Route::middleware("auth")->group(function () {
+    Route::get("/logout", [AuthController::class, "logout"])->name(
+        "auth.logout",
+    );
 
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('auth.dashboard');
-    Route::get('/dashboard/markers', [DashboardController::class, 'markersUser'])->name('auth.dashboard.markers');
-    
+    Route::get("/dashboard", [DashboardController::class, "index"])->name(
+        "auth.dashboard",
+    );
+    Route::get("/dashboard/markers", [
+        DashboardController::class,
+        "markersUser",
+    ])->name("auth.dashboard.markers");
+
     // Profile Routes
-    Route::get('/profile', [ProfileController::class, 'index'])->name('profile');
-    Route::post('/profile/update', [ProfileController::class, 'update'])->name('profile.update');
-    
-    Route::prefix('admin')->name('admin.')->group(function(){
-        //User
-        Route::resource('user', UserController::class)->only(['index', 'store', 'edit', 'update', 'destroy']);
-        Route::put('user/{id}/reset', [UserController::class, 'reset'])->name('user.reset');
-        Route::post('user/{id}/regenerate-certificate', [UserController::class, 'regenerateCertificate'])->name('user.regenerate-certificate');
-        
-        //Server
-        Route::resource('server', ServerController::class)->only(['index', 'store', 'edit', 'update', 'destroy']);
+    Route::get("/profile", [ProfileController::class, "index"])->name(
+        "profile",
+    );
+    Route::post("/profile/update", [ProfileController::class, "update"])->name(
+        "profile.update",
+    );
 
-        //Company
-        Route::resource('company', CompanyController::class)->only(['index', 'store', 'edit', 'update', 'destroy']);
+    Route::prefix("admin")
+        ->name("admin.")
+        ->group(function () {
+            //User
+            Route::resource("user", UserController::class)->only([
+                "index",
+                "store",
+                "edit",
+                "update",
+                "destroy",
+            ]);
+            Route::put("user/{id}/reset", [
+                UserController::class,
+                "reset",
+            ])->name("user.reset");
+            Route::post("user/{id}/regenerate-certificate", [
+                UserController::class,
+                "regenerateCertificate",
+            ])->name("user.regenerate-certificate");
 
-        //Levels
-        Route::resource('level', LevelController::class)->only(['index', 'store', 'edit', 'update', 'destroy']);
+            //Server
+            Route::resource("server", ServerController::class)->only([
+                "index",
+                "store",
+                "edit",
+                "update",
+                "destroy",
+            ]);
 
-        //Log Activity
-        Route::resource('log-activity', LogActivitiesController::class)->only(['index']);
-    });
+            //Company
+            Route::resource("company", CompanyController::class)
+                ->only(["index", "store", "edit", "update", "destroy"])
+                ->middleware("superadmin");
+
+            //Levels
+            Route::resource("level", LevelController::class)->only([
+                "index",
+                "store",
+                "edit",
+                "update",
+                "destroy",
+            ]);
+
+            //Log Activity
+            Route::resource(
+                "log-activity",
+                LogActivitiesController::class,
+            )->only(["index"]);
+        });
 });
