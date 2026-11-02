@@ -6,8 +6,9 @@
         @php
             // echo '<pre>', var_dump(collect(config('sidebar.menu'))->where('title', 'Master Data')), '</pre>';
             $menus = collect(config('sidebar.menu'))
-                ->when(Auth::user()->level_id != 0, function($q){
-                    return $q->whereIn('title', explode(',', Auth::user()->level->menu));
+                ->when((int) Auth::user()->level_id !== 0, function($q){
+                    return $q->whereIn('title', explode(',', Auth::user()->level->menu ?? ''))
+                             ->where('title', '<>', 'Company');
                 }, function($q){
                     return $q->where('title', '<>', 'Account');
                 })
@@ -41,7 +42,7 @@
         <ul class="pcoded-item pcoded-left-item">
             <li class="{{ (isset($menu['route_name'])?'':'pcoded-hasmenu pcoded-trigger ').$active }}">
                 <a href="{{ isset($menu['route_name'])?route($menu['route_name']):'javascript:void(0)' }}" class="waves-effect waves-dark">
-                    <span class="pcoded-micon"><i class="{{ $menu['icon'] }}"></i><b>D</b></span>
+                    <span class="pcoded-micon"><i class="{{ $menu['icon'] }} "></i><b>D</b></span>
                     <span class="pcoded-mtext">{{ $menu['title'] }}</span>
                     <span class="pcoded-mcaret"></span>
                 </a>
