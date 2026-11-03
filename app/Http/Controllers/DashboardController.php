@@ -30,18 +30,32 @@ class DashboardController extends Controller
     }
     public function markersUser()
     {
+        $authUser = Auth::user();
+        $isSuperAdmin = (int) $authUser->level_id === 0;
+
         $data = User::select("users.*", "tz.code")
             ->join("companies as co", "co.id", "=", "users.company_id")
             ->join("timezones as tz", "tz.id", "=", "co.timezone_id")
-            ->has("position")
+            ->whereHas("position", function ($query) {
+                $query->whereNotNull("latitude")
+                    ->where("latitude", "!=", "")
+                    ->where("latitude", "!=", "null")
+                    ->whereNotNull("longitude")
+                    ->where("longitude", "!=", "")
+                    ->where("longitude", "!=", "null");
+            })
             ->with("position")
-            ->when(Auth::user()->level_id != 0, function ($query) {
+            ->when(!$isSuperAdmin, function ($query) use ($authUser) {
+                if (empty($authUser->company_id)) {
+                    return $query->whereRaw("0 = 1");
+                }
                 return $query->where(
                     "users.company_id",
-                    Auth::user()->company_id,
+                    $authUser->company_id,
                 );
             })
             ->get();
+
         return response()->json(
             [
                 "status" => "success",
