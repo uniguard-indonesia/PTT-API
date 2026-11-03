@@ -4,99 +4,56 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Helper;
-use App\Models\User;
-use App\Models\Certificate;
+use App\Http\Requests\Admin\StoreUserRequest;
+use App\Http\Requests\Admin\UpdateUserRequest;
+use App\Models\Company;
 use App\Models\Level;
-use Illuminate\Support\Facades\Auth;
+use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Yajra\DataTables\DataTables;
-use App\Models\Company;
-use Carbon\Carbon;
 
 class UserController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    protected $rules = [
-        "name" => "required",
-        "email" => "email|required",
-        "company_id" => "required",
-        "level_id" => "required",
-    ];
-    private function __uploadCertificate($file, $user_id)
-    {
-        // Buat path penyimpanan dengan nama file asli
-        $fileName = $file->getClientOriginalName();
-        // $path = $file->storeAs('certificates', $fileName);
-        $file->move(public_path("certificates/"), $fileName);
-        $certificate = Certificate::where("user_id", $user_id);
-        if ($certificate->count() > 0) {
-            // Hapus file sertifikat lama
-            // Storage::delete($certificate->certificate_path);
-            unlink(public_path("certificates/") . $fileName);
-            // Update sertifikat dengan path baru
-            $certificate->update([
-                "certificate_path" => "certificates/" . $fileName,
-            ]);
-        } else {
-            // Buat entri sertifikat baru
-            Certificate::create([
-                "user_id" => $user_id,
-                "certificate_path" => "certificates/" . $fileName,
-            ]);
-        }
-    }
-    private function __insertCertificate($user_id)
-    {
-        if (in_array(Auth::user()->company_id, [1, 2])) {
-            $cert = "certificates/ptt.device.p12";
-        } else {
-            $cert = "certificates/clientgroup.p12";
-        }
-        Certificate::create([
-            "user_id" => $user_id,
-            "certificate_path" => $cert,
-        ]);
-    }
     private function __uploadPhoto($file, $exist = false)
     {
-        $fileName = time() . "." . $file->getClientOriginalExtension();
+        $extension = $file->getClientOriginalExtension();
+        $safeExtension = in_array(strtolower($extension), ['jpeg', 'jpg', 'png', 'gif', 'webp'])
+            ? strtolower($extension)
+            : 'jpg';
+        $fileName = time() . '_' . uniqid() . '.' . $safeExtension;
         $file->move(public_path("dist/profiles/"), $fileName);
         if ($exist) {
-            unlink(public_path("dist/profiles/") . $exist);
+            $existPath = public_path("dist/profiles/" . basename($exist));
+            if (file_exists($existPath) && is_file($existPath)) {
+                @unlink($existPath);
+            }
         }
         return $fileName;
     }
+
     private function getTimezoneCode()
     {
-        return Auth::user()->company
-            ? Auth::user()->company->timezone->code
-            : "UTC";
+        return Auth::user()->company?->timezone?->code ?? "UTC";
     }
-    private function findAuthorizedUser($id, array $with = [])
-    {
-        return User::when(!empty($with), function ($query) use ($with) {
-            $query->with($with);
-        })
-            ->when(Auth::user()->level_id != 0, function ($query) {
-                $query->where("company_id", Auth::user()->company_id);
-            })
-            ->find($id);
-    }
+
+    /**
+     * Display a listing of the resource.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
         if ($request->wantsJson()) {
-            $user = User::with("company", "level")
-                ->when(Auth::user()->level_id != 0, function ($q) {
-                    $q->where("company_id", Auth::user()->company_id);
-                })
+            $user = User::manageableBy($request->user())
+                ->with("company", "level")
                 ->latest()
                 ->get();
+
             return DataTables::of($user)
                 ->addIndexColumn()
                 ->editColumn("created_at", function ($row) {
@@ -108,7 +65,7 @@ class UserController extends Controller
                     return $row->company ? $row->company->name : "UNKNOWN";
                 })
                 ->editColumn("level", function ($row) {
-                    return $row->level ? $row->level->name : "UNKNOWN";
+                    return $row->level ? $row->level->name : ($row->isSuperAdmin() ? "Super Admin" : "UNKNOWN");
                 })
                 ->addColumn("action", function ($row) {
                     return Helper::actionButtons($row, [
@@ -121,110 +78,51 @@ class UserController extends Controller
                 ->rawColumns(["action"])
                 ->make(true);
         } else {
+            $actor = $request->user();
+            $levels = Level::assignableBy($actor)->get();
+            if ($actor && $actor->isSuperAdmin()) {
+                $superAdminLevel = (object) [
+                    "id" => User::LEVEL_SUPER_ADMIN,
+                    "name" => "Super Admin",
+                ];
+                $levels->prepend($superAdminLevel);
+            }
+
             $data = [
                 "title" => "User",
-                "levels" => Level::when(Auth::user()->level_id != 0, function (
-                    $q,
-                ) {
-                    $q->where("id", "<>", 1);
+                "levels" => $levels,
+                "companies" => Company::when(!$actor->isSuperAdmin(), function ($q) use ($actor) {
+                    $q->where("id", $actor->company_id);
                 })->get(),
-                "companies" => Company::when(
-                    Auth::user()->level_id != 0,
-                    function ($q) {
-                        $q->where("id", Auth::user()->company_id);
-                    },
-                )->get(),
             ];
             return view("pages.admin.user", $data);
         }
     }
 
     /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Http\Requests\Admin\StoreUserRequest  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(Request $request)
+    public function store(StoreUserRequest $request)
     {
-        $input = $request->only([
-            "company_id",
-            "name",
-            "email",
-            "level_id",
-            "password",
-            "certificate",
-        ]);
-        if (Auth::user()->level_id != 0) {
-            $input["company_id"] = Auth::user()->company_id;
-        }
-        $this->rules["password"] = "required";
-        $validator = Validator::make($input, $this->rules, [], []);
-        if ($validator->fails()) {
-            return response()->json(
-                [
-                    "status" => "error",
-                    "errors" => $validator->errors(),
-                ],
-                400,
-            );
-        } else {
-            $input["password"] = Hash::make($request->password);
-            if ($request->has("photo")) {
-                $input["photo"] = $this->__uploadPhoto($request->photo);
-            }
-            $create = User::create($input);
-            if ($create) {
-                // Automatically generated and registered to Mumble in User's booted event (via MumbleService)
-                // $this->__insertCertificate($create->id);
-                return response()->json(
-                    [
-                        "status" => "success",
-                        "message" => "User created successfully",
-                    ],
-                    200,
-                );
-            } else {
-                return response()->json(
-                    [
-                        "status" => "error",
-                        "message" => "internal server error",
-                    ],
-                    500,
-                );
-            }
-        }
-    }
+        $input = $request->validated();
+        $input["password"] = Hash::make($request->password);
 
-    /**
-     * Display the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
-    public function reset($id, Request $request)
-    {
-        $data = $this->findAuthorizedUser($id);
-        if ($data) {
-            $input = [
-                "password" => Hash::make($request->new_password),
-            ];
-            $data->update($input);
+        if ($request->hasFile("photo")) {
+            $input["photo"] = $this->__uploadPhoto($request->file("photo"));
+        } else {
+            unset($input["photo"]);
+        }
+
+        $create = User::create($input);
+        if ($create) {
+            // Automatically generated and registered to Mumble in User's booted event (via MumbleService)
             return response()->json(
                 [
                     "status" => "success",
-                    "message" => "Reset password successfully",
-                    "data" => $data,
+                    "message" => "User created successfully",
                 ],
                 200,
             );
@@ -232,147 +130,188 @@ class UserController extends Controller
             return response()->json(
                 [
                     "status" => "error",
-                    "message" => "Data not exist",
+                    "message" => "internal server error",
                 ],
-                404,
+                500,
             );
         }
+    }
+
+    /**
+     * Reset the user password.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function reset(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            "new_password" => ["required", "string", "min:6"],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "The given data was invalid.",
+                    "fields" => $validator->errors(),
+                    "errors" => $validator->errors(),
+                ],
+                422,
+            );
+        }
+
+        $data = User::manageableBy($request->user())->findOrFail($id);
+
+        $data->update([
+            "password" => Hash::make($request->new_password),
+        ]);
+
+        // Invalidate active Sanctum tokens
+        $data->tokens()->delete();
+
+        return response()->json(
+            [
+                "status" => "success",
+                "message" => "Reset password successfully",
+                "data" => $data,
+            ],
+            200,
+        );
     }
 
     /**
      * Show the form for editing the specified resource.
      *
+     * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function edit($id)
+    public function edit(Request $request, $id)
     {
-        $data = $this->findAuthorizedUser($id, ["servers.server"]);
-        if ($data) {
-            return response()->json(
-                [
-                    "status" => "success",
-                    "message" => "Data retrieved successfully",
-                    "data" => $data,
-                ],
-                200,
-            );
-        } else {
-            return response()->json(
-                [
-                    "status" => "error",
-                    "message" => "Data not exist",
-                ],
-                404,
-            );
-        }
+        $data = User::manageableBy($request->user())
+            ->with(["servers.server"])
+            ->findOrFail($id);
+
+        return response()->json(
+            [
+                "status" => "success",
+                "message" => "Data retrieved successfully",
+                "data" => $data,
+            ],
+            200,
+        );
     }
 
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Http\Requests\Admin\UpdateUserRequest  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, $id)
+    public function update(UpdateUserRequest $request, $id)
     {
-        $input = $request->only([
-            "company_id",
-            "name",
-            "email",
-            "certificate",
-            "level_id",
-        ]);
-        if (Auth::user()->level_id != 0) {
-            $input["company_id"] = Auth::user()->company_id;
-        }
-        $validator = Validator::make($input, $this->rules, [], []);
-        if ($validator->fails()) {
-            return response()->json(
-                [
-                    "status" => "error",
-                    "errors" => $validator->errors(),
-                ],
-                400,
-            );
-        } else {
-            $data = $this->findAuthorizedUser($id);
-            if ($data) {
-                if ($request->has("photo")) {
-                    $input["photo"] = $this->__uploadPhoto($request->photo);
-                }
-                $data->update($input);
-                return response()->json(
-                    [
-                        "status" => "success",
-                        "message" => "Data updated successfully",
-                        "data" => $data,
-                    ],
-                    200,
-                );
-            } else {
+        $actor = $request->user();
+        $data = User::manageableBy($actor)->findOrFail($id);
+
+        // Prevent self-escalation
+        if ((int) $actor->id === (int) $data->id) {
+            if ($request->has('level_id') && (int) $request->input('level_id') !== (int) $data->level_id) {
                 return response()->json(
                     [
                         "status" => "error",
-                        "message" => "Data not exist",
+                        "message" => "You cannot modify your own level.",
                     ],
-                    404,
+                    403,
+                );
+            }
+            if ($request->has('company_id') && (int) $request->input('company_id') !== (int) $data->company_id) {
+                return response()->json(
+                    [
+                        "status" => "error",
+                        "message" => "You cannot modify your own company.",
+                    ],
+                    403,
                 );
             }
         }
+
+        $input = $request->validated();
+
+        if ((int) $actor->id === (int) $data->id) {
+            unset($input['level_id'], $input['company_id']);
+        }
+
+        if ($request->hasFile("photo")) {
+            $input["photo"] = $this->__uploadPhoto($request->file("photo"), $data->photo);
+        } else {
+            unset($input["photo"]);
+        }
+
+        $data->update($input);
+
+        return response()->json(
+            [
+                "status" => "success",
+                "message" => "Data updated successfully",
+                "data" => $data,
+            ],
+            200,
+        );
     }
 
     /**
      * Remove the specified resource from storage.
      *
+     * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $data = $this->findAuthorizedUser($id, ["certificate"]);
-        if ($data) {
-            if ($data->certificate) {
-                if (
-                    file_exists(
-                        public_path($data->certificate->certificate_path),
-                    )
-                ) {
-                    unlink(public_path($data->certificate->certificate_path));
-                }
-            }
-            $data->delete();
-            return response()->json(
-                [
-                    "status" => "success",
-                    "message" => "Data deleted successfully",
-                ],
-                200,
-            );
-        } else {
+        $actor = $request->user();
+        $data = User::manageableBy($actor)->with(["certificate"])->findOrFail($id);
+
+        // Prevent self-deletion
+        if ((int) $actor->id === (int) $data->id) {
             return response()->json(
                 [
                     "status" => "error",
-                    "message" => "Data not exist",
+                    "message" => "You cannot delete your own account.",
                 ],
-                404,
+                403,
             );
         }
+
+        if ($data->certificate) {
+            $certPath = public_path($data->certificate->certificate_path);
+            if (file_exists($certPath)) {
+                @unlink($certPath);
+            }
+        }
+        $data->delete();
+
+        return response()->json(
+            [
+                "status" => "success",
+                "message" => "Data deleted successfully",
+            ],
+            200,
+        );
     }
 
-    public function regenerateCertificate($id)
+    /**
+     * Regenerate and register certificate for the user.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function regenerateCertificate(Request $request, $id)
     {
-        $user = $this->findAuthorizedUser($id);
-        if (!$user) {
-            return response()->json(
-                [
-                    "status" => "error",
-                    "message" => "User not found",
-                ],
-                404,
-            );
-        }
+        $user = User::manageableBy($request->user())->findOrFail($id);
 
         // Call generateAndRegister to create new certificate and sync it to Mumble
         $success = \App\Services\MumbleService::generateAndRegister($user);
@@ -380,9 +319,8 @@ class UserController extends Controller
         if ($success) {
             return response()->json([
                 "status" => "success",
-                "message" =>
-                    "Certificate regenerated and registered successfully",
-            ]);
+                "message" => "Certificate regenerated and registered successfully",
+            ], 200);
         }
 
         return response()->json(

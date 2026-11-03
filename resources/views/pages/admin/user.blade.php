@@ -312,13 +312,17 @@
                         Table.ajax.reload(null, false);
                     },
                     error: function(res) {
-                        let fields = res.responseJSON.fields;
+                        let fields = res.responseJSON ? (res.responseJSON.fields || res.responseJSON.errors || {}) : {};
+                        let status = (res.responseJSON && res.responseJSON.status) ? res.responseJSON.status : 'error';
                         $.each(fields, function(i, val) {
-                            $.each(val, function(idx, value) {
-                                notification(response.responseJSON.status,
-                                    value);
-                            })
-                        })
+                            if (Array.isArray(val)) {
+                                $.each(val, function(idx, value) {
+                                    notification(status, value);
+                                });
+                            } else {
+                                notification(status, val);
+                            }
+                        });
                     }
                 })
             })
@@ -335,13 +339,17 @@
                         Table.ajax.reload(null, false);
                     },
                     error: function(res) {
-                        let fields = res.responseJSON.fields;
+                        let fields = res.responseJSON ? (res.responseJSON.fields || res.responseJSON.errors || {}) : {};
+                        let status = (res.responseJSON && res.responseJSON.status) ? res.responseJSON.status : 'error';
                         $.each(fields, function(i, val) {
-                            $.each(val, function(idx, value) {
-                                notification(response.responseJSON.status,
-                                    value);
-                            })
-                        })
+                            if (Array.isArray(val)) {
+                                $.each(val, function(idx, value) {
+                                    notification(status, value);
+                                });
+                            } else {
+                                notification(status, val);
+                            }
+                        });
                     }
                 })
             })
