@@ -8,9 +8,97 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
+use Illuminate\Database\Eloquent\Builder;
+
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
+
+    public const LEVEL_SUPER_ADMIN = 0;
+    public const LEVEL_COMPANY_ADMIN = 1;
+    public const LEVEL_USER = 2;
+
+    /**
+     * Check if the user is a Super Admin.
+     *
+     * @return bool
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->level_id !== null && (int) $this->level_id === self::LEVEL_SUPER_ADMIN;
+    }
+
+    /**
+     * Check if the user is a Company Admin.
+     *
+     * @return bool
+     */
+    public function isCompanyAdmin(): bool
+    {
+        return $this->level_id !== null && (int) $this->level_id === self::LEVEL_COMPANY_ADMIN;
+    }
+
+    /**
+     * Check if the user is a regular User.
+     *
+     * @return bool
+     */
+    public function isRegularUser(): bool
+    {
+        return $this->level_id !== null && (int) $this->level_id === self::LEVEL_USER;
+    }
+
+    /**
+     * Scope a query to only include users manageable by the given actor.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $q
+     * @param  \App\Models\User|null  $actor
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeManageableBy(Builder $q, ?User $actor = null): Builder
+    {
+        if (!$actor) {
+            return $q->whereRaw('0 = 1');
+        }
+
+        if ($actor->isSuperAdmin()) {
+            return $q;
+        }
+
+        if (empty($actor->company_id)) {
+            return $q->whereRaw('0 = 1');
+        }
+
+        return $q->where('company_id', $actor->company_id)
+            ->where('level_id', '>', self::LEVEL_SUPER_ADMIN);
+    }
+
+    /**
+     * Scope a query to only include users belonging to the actor's tenant.
+     * Fail-closed: if actor is null or actor is non-superadmin with empty company_id, returns empty.
+     * Super admin sees all users.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  \App\Models\User|null  $actor
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeInTenantOf(Builder $query, ?User $actor = null): Builder
+    {
+        if (!$actor) {
+            return $query->whereRaw('0 = 1');
+        }
+
+        if ($actor->isSuperAdmin()) {
+            return $query;
+        }
+
+        if (empty($actor->company_id)) {
+            return $query->whereRaw('0 = 1');
+        }
+
+        $table = $query->getModel()->getTable();
+        return $query->where("{$table}.company_id", $actor->company_id);
+    }
 
     protected static function booted()
     {
@@ -72,7 +160,7 @@ class User extends Authenticatable
 
     public function positions()
     {
-        return $this->hasMany(Position::class, 'id', 'user_id');
+        return $this->hasMany(Position::class, 'user_id', 'id');
     }
     public function company()
     {

@@ -80,13 +80,15 @@ Route::middleware("auth")->group(function () {
                 ->middleware("superadmin");
 
             //Levels
-            Route::resource("level", LevelController::class)->only([
-                "index",
-                "store",
-                "edit",
-                "update",
-                "destroy",
-            ]);
+            Route::resource("level", LevelController::class)
+                ->only([
+                    "index",
+                    "store",
+                    "edit",
+                    "update",
+                    "destroy",
+                ])
+                ->middleware("superadmin");
 
             //Log Activity
             Route::resource(
