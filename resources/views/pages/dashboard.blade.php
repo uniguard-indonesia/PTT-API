@@ -59,30 +59,90 @@
             "Google Satellites": googleTile,
             "Google Terrain": googleTerrain
         };
+        var defaultCenter = [-25.2744, 133.7751];
+        var defaultZoom = 4;
         var map = L.map('map', {
-            center: [-25.2744, 133.7751],
-            zoom: 4,
+            center: defaultCenter,
+            zoom: defaultZoom,
             layers: [osmTile, googleTile]
         });
         var layerControl = L.control.layers(baseMaps).addTo(map);
-        var markersLayer = new L.LayerGroup();
+        var markersLayer = new L.LayerGroup().addTo(map);
+
         function markersUser() {
             markersLayer.clearLayers();
-            var markers = [];
+            var latLngs = [];
+
             $.get("{{ route('auth.dashboard.markers') }}", function(res) {
-                $.each(res.data, function(idx, val) {
-                    markers = new L.marker([val.position.latitude, val.position.longitude])
-                        .bindPopup(val.name + '<br>' + moment(val.position.created_at).tz(val.code).format(
-                            'DD MMM YYYY HH:mm z'))
-                        .on('click', onClick);
-                    markersLayer.addLayer(markers);
-                })
+                if (res && res.data && Array.isArray(res.data)) {
+                    $.each(res.data, function(idx, val) {
+                        if (
+                            val &&
+                            val.position &&
+                            (typeof val.position.latitude === 'number' ||
+                                (typeof val.position.latitude === 'string' && val.position.latitude.trim() !== '')) &&
+                            (typeof val.position.longitude === 'number' ||
+                                (typeof val.position.longitude === 'string' && val.position.longitude.trim() !== ''))
+                        ) {
+                            var lat = Number(val.position.latitude);
+                            var lng = Number(val.position.longitude);
+
+                            if (
+                                Number.isFinite(lat) &&
+                                Number.isFinite(lng) &&
+                                lat >= -90 &&
+                                lat <= 90 &&
+                                lng >= -180 &&
+                                lng <= 180
+                            ) {
+                                var formattedTime = '';
+                                if (val.position.created_at) {
+                                    try {
+                                        formattedTime = val.code
+                                            ? moment(val.position.created_at).tz(val.code).format('DD MMM YYYY HH:mm z')
+                                            : moment(val.position.created_at).format('DD MMM YYYY HH:mm');
+                                    } catch (e) {
+                                        formattedTime = moment(val.position.created_at).format('DD MMM YYYY HH:mm');
+                                    }
+                                }
+
+                                var popupContent = document.createElement('div');
+                                popupContent.appendChild(document.createTextNode(val.name || ''));
+                                popupContent.appendChild(document.createElement('br'));
+                                popupContent.appendChild(document.createTextNode(formattedTime));
+
+                                var marker = L.marker([lat, lng])
+                                    .bindPopup(popupContent)
+                                    .on('click', onClick);
+
+                                markersLayer.addLayer(marker);
+                                latLngs.push([lat, lng]);
+                            }
+                        }
+                    });
+                }
+
                 function onClick(e) {
                     var popup = e.target.getPopup();
                     var content = popup.getContent();
                 }
-                markersLayer.addTo(map);
-            })
+
+                if (!map.hasLayer(markersLayer)) {
+                    markersLayer.addTo(map);
+                }
+
+                if (latLngs.length === 0) {
+                    map.setView(defaultCenter, defaultZoom);
+                } else if (latLngs.length === 1) {
+                    map.flyTo(latLngs[0], 14);
+                } else {
+                    var bounds = L.latLngBounds(latLngs);
+                    map.fitBounds(bounds, {
+                        padding: [50, 50],
+                        maxZoom: 16
+                    });
+                }
+            });
         }
 
         $(document).ready(function() {

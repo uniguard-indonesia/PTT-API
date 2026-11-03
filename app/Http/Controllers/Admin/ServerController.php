@@ -42,7 +42,7 @@ class ServerController extends Controller
         return Server::when(!empty($with), function ($query) use ($with) {
             $query->with($with);
         })
-            ->when(Auth::user()->level_id != 0, function ($query) {
+            ->when(!Auth::user()->isSuperAdmin(), function ($query) {
                 $query->whereHas("companies", function ($q) {
                     $q->where("company_id", Auth::user()->company_id);
                 });
@@ -53,7 +53,7 @@ class ServerController extends Controller
     public function index(Request $request)
     {
         if ($request->wantsJson()) {
-            $data = Server::when(Auth::user()->level_id != 0, function ($q) {
+            $data = Server::when(!Auth::user()->isSuperAdmin(), function ($q) {
                 $q->whereHas("companies", function ($query) {
                     $query->where("company_id", Auth::user()->company_id);
                 });
@@ -62,7 +62,7 @@ class ServerController extends Controller
             return DataTables::of($data)
                 ->addIndexColumn()
                 ->addColumn("action", function ($row) {
-                    if ((int) Auth::user()->level_id !== 0) {
+                    if (!Auth::user()->isSuperAdmin()) {
                         return '<span class="badge badge-secondary">Read Only</span>';
                     }
                     return Helper::actionButtons($row, ["edit", "delete"]);
@@ -73,12 +73,12 @@ class ServerController extends Controller
             $data = [
                 "title" => "Server List | PTT UniGuard",
                 "companies" => Company::when(
-                    Auth::user()->level_id != 0,
+                    !Auth::user()->isSuperAdmin(),
                     function ($q) {
                         $q->where("id", Auth::user()->company_id);
                     },
                 )->get(),
-                "users" => User::when(Auth::user()->level_id != 0, function (
+                "users" => User::when(!Auth::user()->isSuperAdmin(), function (
                     $q,
                 ) {
                     $q->where("company_id", Auth::user()->company_id);
@@ -106,7 +106,7 @@ class ServerController extends Controller
      */
     public function store(Request $request)
     {
-        if ((int) Auth::user()->level_id !== 0) {
+        if (!Auth::user()->isSuperAdmin()) {
             return response()->json(
                 [
                     "status" => "error",
@@ -145,7 +145,7 @@ class ServerController extends Controller
             $create = Server::create($input);
             if ($create) {
                 $companies =
-                    Auth::user()->level_id != 0
+                    !Auth::user()->isSuperAdmin()
                         ? [Auth::user()->company_id]
                         : $request->companies ?? [];
                 $this->__insertCompanies($companies, $create->id);
@@ -187,6 +187,16 @@ class ServerController extends Controller
      */
     public function edit($id)
     {
+        if (!Auth::user()->isSuperAdmin()) {
+            return response()->json(
+                [
+                    "status" => "error",
+                    "message" => "Unauthorized. Server configuration is read-only for company administrators.",
+                ],
+                403,
+            );
+        }
+
         $data = $this->findAuthorizedServer($id, ["companies"]);
         if ($data) {
             return response()->json(
@@ -202,7 +212,6 @@ class ServerController extends Controller
                 [
                     "status" => "error",
                     "message" => "Server not exist",
-                    "data" => $data,
                 ],
                 404,
             );
@@ -218,7 +227,7 @@ class ServerController extends Controller
      */
     public function update(Request $request, $id)
     {
-        if ((int) Auth::user()->level_id !== 0) {
+        if (!Auth::user()->isSuperAdmin()) {
             return response()->json(
                 [
                     "status" => "error",
@@ -258,7 +267,7 @@ class ServerController extends Controller
             if ($data) {
                 $data->update($input);
                 $companies =
-                    Auth::user()->level_id != 0
+                    !Auth::user()->isSuperAdmin()
                         ? [Auth::user()->company_id]
                         : $request->companies ?? [];
                 $this->__insertCompanies($companies, $id, true);
@@ -291,7 +300,7 @@ class ServerController extends Controller
      */
     public function destroy($id)
     {
-        if ((int) Auth::user()->level_id !== 0) {
+        if (!Auth::user()->isSuperAdmin()) {
             return response()->json(
                 [
                     "status" => "error",

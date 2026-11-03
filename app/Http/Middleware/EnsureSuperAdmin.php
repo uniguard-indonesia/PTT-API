@@ -17,7 +17,7 @@ class EnsureSuperAdmin
      */
     public function handle(Request $request, Closure $next)
     {
-        if (!Auth::check() || (int) Auth::user()->level_id !== 0) {
+        if (!Auth::check() || !Auth::user()->isSuperAdmin()) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(
                     [

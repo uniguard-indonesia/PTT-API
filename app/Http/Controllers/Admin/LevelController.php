@@ -11,6 +11,10 @@ use Yajra\DataTables\DataTables;
 
 class LevelController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('superadmin');
+    }
     /**
      * Display a listing of the resource.
      *
