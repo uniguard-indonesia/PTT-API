@@ -314,15 +314,21 @@
                     error: function(res) {
                         let fields = res.responseJSON ? (res.responseJSON.fields || res.responseJSON.errors || {}) : {};
                         let status = (res.responseJSON && res.responseJSON.status) ? res.responseJSON.status : 'error';
+                        let hasFieldErrors = false;
                         $.each(fields, function(i, val) {
                             if (Array.isArray(val)) {
                                 $.each(val, function(idx, value) {
+                                    hasFieldErrors = true;
                                     notification(status, value);
                                 });
-                            } else {
+                            } else if (val) {
+                                hasFieldErrors = true;
                                 notification(status, val);
                             }
                         });
+                        if (!hasFieldErrors) {
+                            notification(status, (res.responseJSON && res.responseJSON.message) || 'An unexpected error occurred. Please try again.');
+                        }
                     }
                 })
             })
@@ -341,15 +347,21 @@
                     error: function(res) {
                         let fields = res.responseJSON ? (res.responseJSON.fields || res.responseJSON.errors || {}) : {};
                         let status = (res.responseJSON && res.responseJSON.status) ? res.responseJSON.status : 'error';
+                        let hasFieldErrors = false;
                         $.each(fields, function(i, val) {
                             if (Array.isArray(val)) {
                                 $.each(val, function(idx, value) {
+                                    hasFieldErrors = true;
                                     notification(status, value);
                                 });
-                            } else {
+                            } else if (val) {
+                                hasFieldErrors = true;
                                 notification(status, val);
                             }
                         });
+                        if (!hasFieldErrors) {
+                            notification(status, (res.responseJSON && res.responseJSON.message) || 'An unexpected error occurred. Please try again.');
+                        }
                     }
                 })
             })

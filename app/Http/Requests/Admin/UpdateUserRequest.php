@@ -31,7 +31,17 @@ class UpdateUserRequest extends FormRequest
         /** @var User|null $actor */
         $actor = $this->user();
         $targetRouteParam = $this->route('user') ?? $this->route('id');
-        $targetId = $targetRouteParam instanceof User ? $targetRouteParam->id : $targetRouteParam;
+        $targetUser = null;
+        if ($actor && $targetRouteParam instanceof User) {
+            $targetUser = User::manageableBy($actor)->find($targetRouteParam->getKey());
+        } elseif (
+            $actor &&
+            (is_int($targetRouteParam) ||
+                (is_string($targetRouteParam) && ctype_digit($targetRouteParam)))
+        ) {
+            $targetUser = User::manageableBy($actor)->find($targetRouteParam);
+        }
+        $targetId = $targetUser?->getKey();
 
         if ($actor && $actor->isSuperAdmin()) {
             $companyRule = ['required', 'integer', 'exists:companies,id'];

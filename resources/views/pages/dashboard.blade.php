@@ -79,15 +79,22 @@
                         if (
                             val &&
                             val.position &&
-                            val.position.latitude != null &&
-                            val.position.longitude != null &&
-                            val.position.latitude !== '' &&
-                            val.position.longitude !== ''
+                            (typeof val.position.latitude === 'number' ||
+                                (typeof val.position.latitude === 'string' && val.position.latitude.trim() !== '')) &&
+                            (typeof val.position.longitude === 'number' ||
+                                (typeof val.position.longitude === 'string' && val.position.longitude.trim() !== ''))
                         ) {
-                            var lat = parseFloat(val.position.latitude);
-                            var lng = parseFloat(val.position.longitude);
+                            var lat = Number(val.position.latitude);
+                            var lng = Number(val.position.longitude);
 
-                            if (!isNaN(lat) && !isNaN(lng)) {
+                            if (
+                                Number.isFinite(lat) &&
+                                Number.isFinite(lng) &&
+                                lat >= -90 &&
+                                lat <= 90 &&
+                                lng >= -180 &&
+                                lng <= 180
+                            ) {
                                 var formattedTime = '';
                                 if (val.position.created_at) {
                                     try {
@@ -99,8 +106,13 @@
                                     }
                                 }
 
+                                var popupContent = document.createElement('div');
+                                popupContent.appendChild(document.createTextNode(val.name || ''));
+                                popupContent.appendChild(document.createElement('br'));
+                                popupContent.appendChild(document.createTextNode(formattedTime));
+
                                 var marker = L.marker([lat, lng])
-                                    .bindPopup((val.name || '') + '<br>' + formattedTime)
+                                    .bindPopup(popupContent)
                                     .on('click', onClick);
 
                                 markersLayer.addLayer(marker);

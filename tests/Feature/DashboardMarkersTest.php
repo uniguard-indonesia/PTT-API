@@ -25,6 +25,13 @@ class DashboardMarkersTest extends TestCase
     protected Level $levelCompanyAdmin;
     protected Level $levelUser;
 
+    private function createUserWithoutRegistration(array $attributes): User
+    {
+        return User::withoutEvents(function () use ($attributes) {
+            return User::create($attributes);
+        });
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -67,7 +74,7 @@ class DashboardMarkersTest extends TestCase
             ['name' => 'Regular User', 'menu' => 'Dashboard']
         );
 
-        $this->superAdmin = User::create([
+        $this->superAdmin = $this->createUserWithoutRegistration([
             'name' => 'Super Admin Test',
             'email' => 'superadmin_' . uniqid() . '@test.com',
             'password' => bcrypt('password123'),
@@ -75,7 +82,7 @@ class DashboardMarkersTest extends TestCase
             'company_id' => $this->companyA->id,
         ]);
 
-        $this->companyAdminA = User::create([
+        $this->companyAdminA = $this->createUserWithoutRegistration([
             'name' => 'Admin A Test',
             'email' => 'admin_a_' . uniqid() . '@test.com',
             'password' => bcrypt('password123'),
@@ -83,7 +90,7 @@ class DashboardMarkersTest extends TestCase
             'company_id' => $this->companyA->id,
         ]);
 
-        $this->companyAdminB = User::create([
+        $this->companyAdminB = $this->createUserWithoutRegistration([
             'name' => 'Admin B Test',
             'email' => 'admin_b_' . uniqid() . '@test.com',
             'password' => bcrypt('password123'),
@@ -91,7 +98,7 @@ class DashboardMarkersTest extends TestCase
             'company_id' => $this->companyB->id,
         ]);
 
-        $this->regularUserA = User::create([
+        $this->regularUserA = $this->createUserWithoutRegistration([
             'name' => 'User A Test',
             'email' => 'user_a_' . uniqid() . '@test.com',
             'password' => bcrypt('password123'),
@@ -200,7 +207,7 @@ class DashboardMarkersTest extends TestCase
             'latitude' => null,
             'longitude' => '115.8605',
         ]);
-        $userNullLat = User::create([
+        $userNullLat = $this->createUserWithoutRegistration([
             'name' => 'Null Lat User',
             'email' => 'null_lat_' . uniqid() . '@test.com',
             'password' => bcrypt('password123'),
@@ -215,7 +222,7 @@ class DashboardMarkersTest extends TestCase
             'latitude' => '-31.9505',
             'longitude' => '',
         ]);
-        $userEmptyLng = User::create([
+        $userEmptyLng = $this->createUserWithoutRegistration([
             'name' => 'Empty Lng User',
             'email' => 'empty_lng_' . uniqid() . '@test.com',
             'password' => bcrypt('password123'),
@@ -225,7 +232,7 @@ class DashboardMarkersTest extends TestCase
         ]);
 
         // User without position in positions table
-        $userNoPos = User::create([
+        $userNoPos = $this->createUserWithoutRegistration([
             'name' => 'No Pos User',
             'email' => 'no_pos_' . uniqid() . '@test.com',
             'password' => bcrypt('password123'),
