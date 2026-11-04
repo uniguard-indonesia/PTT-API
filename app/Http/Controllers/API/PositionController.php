@@ -25,7 +25,7 @@ class PositionController extends Controller
         if (!$actor) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Unauthenticated',
+                'message' => 'Unauthenticated.',
             ], 401);
         }
 
@@ -74,7 +74,7 @@ class PositionController extends Controller
         if (!$actor) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Unauthenticated',
+                'message' => 'Unauthenticated.',
             ], 401);
         }
 
@@ -105,7 +105,10 @@ class PositionController extends Controller
             }
 
             $query = User::with(['position', 'company.timezone'])
-                ->leftJoin('positions as p', 'p.id', '=', 'users.position_id')
+                ->leftJoin('positions as p', function ($join) {
+                    $join->on('p.id', '=', 'users.position_id')
+                        ->where('users.position_id', '>', 0);
+                })
                 ->leftJoin('companies as co', 'co.id', '=', 'users.company_id')
                 ->leftJoin('timezones as tz', 'tz.id', '=', 'co.timezone_id')
                 ->select(
@@ -148,9 +151,14 @@ class PositionController extends Controller
         }
 
         // Listing mode
-        $query = User::has('position')
+        $query = User::whereNotNull('users.position_id')
+            ->where('users.position_id', '>', 0)
+            ->has('position')
             ->with(['position', 'company.timezone'])
-            ->leftJoin('positions as p', 'p.id', '=', 'users.position_id')
+            ->leftJoin('positions as p', function ($join) {
+                $join->on('p.id', '=', 'users.position_id')
+                    ->where('users.position_id', '>', 0);
+            })
             ->leftJoin('companies as co', 'co.id', '=', 'users.company_id')
             ->leftJoin('timezones as tz', 'tz.id', '=', 'co.timezone_id')
             ->select(
@@ -201,7 +209,7 @@ class PositionController extends Controller
         if (!$actor) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Unauthenticated',
+                'message' => 'Unauthenticated.',
             ], 401);
         }
 
