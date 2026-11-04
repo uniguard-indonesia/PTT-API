@@ -16,13 +16,39 @@ class CertificateController extends Controller
             'certificate' => [
                 'required',
                 'file',
-                'mimes:p12,crt,pem,cer,pfx,der',
                 'max:2048',
                 function ($attribute, $value, $fail) {
+                    if (!$value instanceof \Illuminate\Http\UploadedFile) {
+                        return;
+                    }
+
                     $allowedExtensions = ['p12', 'crt', 'pem', 'cer', 'pfx', 'der'];
-                    if ($value instanceof \Illuminate\Http\UploadedFile
-                        && !in_array(strtolower($value->getClientOriginalExtension()), $allowedExtensions, true)) {
+                    $extension = strtolower($value->getClientOriginalExtension());
+                    if (!in_array($extension, $allowedExtensions, true)) {
                         $fail('The certificate must have a permitted file extension.');
+                        return;
+                    }
+
+                    $content = @file_get_contents($value->getRealPath());
+                    if ($content === false || strlen($content) === 0) {
+                        $fail('The certificate file is empty or unreadable.');
+                        return;
+                    }
+
+                    // Disallow PHP scripts and HTML tags
+                    if (preg_match('/<\?(?:php|=)/i', $content) || stripos($content, '<script') !== false) {
+                        $fail('The certificate contains invalid executable content.');
+                        return;
+                    }
+
+                    // For text-based certificates, verify certificate or key envelope
+                    if (in_array($extension, ['pem', 'crt', 'cer'], true)) {
+                        $isPemStructure = preg_match('/-----BEGIN [A-Z0-9\s]+-----/', $content);
+                        $isDerStructure = (ord($content[0]) === 0x30);
+                        if (!$isPemStructure && !$isDerStructure) {
+                            $fail('The certificate does not contain a valid certificate or key structure.');
+                            return;
+                        }
                     }
                 },
             ],
@@ -38,7 +64,7 @@ class CertificateController extends Controller
         $certificate = Auth::user()->certificate;
         $oldCertificatePath = $certificate ? $certificate->certificate_path : null;
 
-        // Move to a new path before changing the record so the old file remains intact on failure.
+        // Move to destination before updating database record
         $file->move($directory, $fileName);
 
         try {
@@ -56,7 +82,7 @@ class CertificateController extends Controller
             }
         } catch (\Throwable $exception) {
             if (is_file($newFilePath)) {
-                unlink($newFilePath);
+                @unlink($newFilePath);
             }
 
             throw $exception;
@@ -65,15 +91,17 @@ class CertificateController extends Controller
         if ($oldCertificatePath) {
             $normalizedOldPath = $this->normalizeCertificatePath($oldCertificatePath);
             $oldFilePath = public_path($normalizedOldPath);
-            $legacyOldPath = substr($normalizedOldPath, strlen('certificates/'));
-            $pathAliases = array_unique([$oldCertificatePath, $normalizedOldPath, $legacyOldPath]);
 
+            // Compare against all other records using the same normalized path
             $isReferencedByAnotherCertificate = Certificate::where('id', '!=', $certificate->id)
-                ->whereIn('certificate_path', $pathAliases)
-                ->exists();
+                ->whereNotNull('certificate_path')
+                ->get(['id', 'certificate_path'])
+                ->contains(function ($otherCert) use ($normalizedOldPath) {
+                    return $this->normalizeCertificatePath($otherCert->certificate_path) === $normalizedOldPath;
+                });
 
             if (!$isReferencedByAnotherCertificate && is_file($oldFilePath)) {
-                unlink($oldFilePath);
+                @unlink($oldFilePath);
             }
         }
 
@@ -83,8 +111,12 @@ class CertificateController extends Controller
         ], 200);
     }
 
-    private function normalizeCertificatePath(string $path): string
+    private function normalizeCertificatePath(?string $path): string
     {
+        if (empty($path)) {
+            return '';
+        }
+
         $path = str_replace('\\', '/', ltrim($path, '/\\'));
 
         return strpos($path, 'certificates/') === 0 ? $path : 'certificates/' . $path;

@@ -60,7 +60,12 @@ class AuthController extends Controller
                 return response()->json(['message' => 'Invalid Email or Password'], 401);
             }
         } catch (\Throwable $th) {
-            Log::error('Login failed due to an unexpected error.', ['event' => 'auth.login']);
+            Log::error('Login failed due to an unexpected error.', [
+                'event' => 'auth.login',
+                'exception' => get_class($th),
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to login, please try again later.'
