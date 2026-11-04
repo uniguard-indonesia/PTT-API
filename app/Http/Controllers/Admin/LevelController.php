@@ -11,6 +11,10 @@ use Yajra\DataTables\DataTables;
 
 class LevelController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('superadmin');
+    }
     /**
      * Display a listing of the resource.
      *
@@ -21,16 +25,16 @@ class LevelController extends Controller
         if ($request->wantsJson()) {
             return DataTables::of(Level::latest()->get())
                 ->addIndexColumn()
-                ->addColumn('action', function ($row) {
-                    return Helper::actionButtons($row, ['edit', 'delete']);
+                ->addColumn("action", function ($row) {
+                    return Helper::actionButtons($row, ["edit", "delete"]);
                 })
-                ->rawColumns(['action'])
+                ->rawColumns(["action"])
                 ->make(true);
         } else {
             $data = [
-                'title' => 'Level',
+                "title" => "Level",
             ];
-            return view('pages.admin.level', $data);
+            return view("pages.admin.level", $data);
         }
     }
 
@@ -52,17 +56,27 @@ class LevelController extends Controller
      */
     public function store(Request $request)
     {
-        $input = $request->only(['name', 'menu']);
-        $validator = Validator::make($input, Level::rules(), [], Level::attributes());
+        $input = $request->only(["name", "menu"]);
+        $validator = Validator::make(
+            $input,
+            Level::rules(),
+            [],
+            Level::attributes(),
+        );
         if ($validator->fails()) {
             $this->responseError($validator->errors(), 400);
         } else {
-            $input['menu'] = implode(',', $request->menu);
+            $menus = array_values(
+                array_filter((array) $request->menu, function ($m) {
+                    return $m !== "Company";
+                }),
+            );
+            $input["menu"] = implode(",", $menus);
             $create = Level::create($input);
             if ($create) {
-                return $this->responseSuccess('Level created Successfully');
+                return $this->responseSuccess("Level created Successfully");
             } else {
-                return $this->responseError('internal server error', 500);
+                return $this->responseError("internal server error", 500);
             }
         }
     }
@@ -88,9 +102,9 @@ class LevelController extends Controller
     {
         $data = Level::find($id);
         if ($data) {
-            return $this->responseSuccess($data, 'data');
+            return $this->responseSuccess($data, "data");
         } else {
-            return $this->responseError('Level not exist', 404);
+            return $this->responseError("Level not exist", 404);
         }
     }
 
@@ -103,18 +117,28 @@ class LevelController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $input = $request->only(['name', 'menu']);
-        $validator = Validator::make($input, Level::rules(), [], Level::attributes());
+        $input = $request->only(["name", "menu"]);
+        $validator = Validator::make(
+            $input,
+            Level::rules(),
+            [],
+            Level::attributes(),
+        );
         if ($validator->fails()) {
             $this->responseError($validator->errors(), 400);
         } else {
             $data = Level::find($id);
             if ($data) {
-                $input['menu'] = implode(',', $request->menu);
+                $menus = array_values(
+                    array_filter((array) $request->menu, function ($m) {
+                        return $m !== "Company";
+                    }),
+                );
+                $input["menu"] = implode(",", $menus);
                 $data->update($input);
-                return $this->responseSuccess('Level updated Successfully');
+                return $this->responseSuccess("Level updated Successfully");
             } else {
-                return $this->responseError('Level not exist', 404);
+                return $this->responseError("Level not exist", 404);
             }
         }
     }
@@ -130,9 +154,9 @@ class LevelController extends Controller
         $data = Level::find($id);
         if ($data) {
             $data->delete();
-            return $this->responseSuccess('Level deleted Successfully');
+            return $this->responseSuccess("Level deleted Successfully");
         } else {
-            return $this->responseError('Level not exist', 404);
+            return $this->responseError("Level not exist", 404);
         }
     }
 }

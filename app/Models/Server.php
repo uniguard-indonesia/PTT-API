@@ -11,6 +11,7 @@ class Server extends Model
 
     protected $table = 'servers';
     protected $guarded = ['id'];
+    protected $hidden = ['password'];
 
     public static function rules()
     {

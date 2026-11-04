@@ -109,6 +109,7 @@ steps:
                     - ./.env:/var/www/ptt-web/.env:ro
                     - ./storage:/var/www/ptt-web/storage
                     - ./public/certificates:/var/www/ptt-web/public/certificates
+                    - ./public/audio:/var/www/ptt-web/public/audio
                 restart: unless-stopped
                 tty: true
                 working_dir: /var/www/ptt-web
