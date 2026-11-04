@@ -2,6 +2,9 @@ when:
   event: push
   branch: production
 
+labels:
+  location: server-ptt
+
 steps:
   # -------------------------------------------------------
   # STEP 1: Build Image langsung di Docker Daemon Lokal VPS
