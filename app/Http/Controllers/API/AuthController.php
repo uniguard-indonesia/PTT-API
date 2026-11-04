@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
@@ -48,7 +49,7 @@ class AuthController extends Controller
                     'message' => 'User logged successfully!',
                     'data' => [
                         'access_token' => $accessToken,
-                        'refresh_token' => $refreshToken, // Tambahkan refresh token ke respons
+                        'refresh_token' => $refreshToken,
                         'token_type' => 'Bearer',
                         'name' => $user->name,
                         'email' => $user->email
@@ -59,9 +60,10 @@ class AuthController extends Controller
                 return response()->json(['message' => 'Invalid Email or Password'], 401);
             }
         } catch (\Throwable $th) {
+            Log::error('Login failed due to an unexpected error.', ['event' => 'auth.login']);
             return response()->json([
                 'success' => false,
-                'message' => 'Something went wrong: ' . $th->getMessage()
+                'message' => 'Failed to login, please try again later.'
             ], 500);
         }
     }
@@ -84,17 +86,17 @@ class AuthController extends Controller
 
         $refreshToken = $request->refresh_token;
 
-        // Verifikasi apakah refresh token valid
+        // Verify refresh token
         $token = \Laravel\Sanctum\PersonalAccessToken::findToken($refreshToken);
 
         if (!$token) {
             return response()->json(['message' => 'Invalid refresh token'], 401);
         }
 
-        // Dapatkan pengguna dari token
+        // Resolve user associated with token
         $user = $token->tokenable;
 
-        // Buat access token baru
+        // Generate new access token
         $accessToken = $user->createToken('API Token')->plainTextToken;
 
         return response()->json([
@@ -141,6 +143,7 @@ class AuthController extends Controller
 
             return response()->json(['message' => 'Certificate file could not be generated.'], 500);
         } catch (\Throwable $th) {
+            Log::error($th);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to download certificate: ' . $th->getMessage()
@@ -149,4 +152,3 @@ class AuthController extends Controller
     }
 
 }
-
