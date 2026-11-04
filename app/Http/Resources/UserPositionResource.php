@@ -14,6 +14,8 @@ class UserPositionResource extends JsonResource
      */
     public function toArray($request)
     {
+        $hasValidPosition = !empty($this->position_id) && (int) $this->position_id > 0;
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -23,12 +25,12 @@ class UserPositionResource extends JsonResource
             'company_name' => $this->company_name ?? optional($this->company)->name,
             'timezone_name' => $this->timezone_name ?? optional(optional($this->company)->timezone)->name ?? 'UTC',
             'level_id' => $this->level_id,
-            'position_id' => $this->position_id,
-            'latitude' => $this->latitude ?? optional($this->position)->latitude,
-            'longitude' => $this->longitude ?? optional($this->position)->longitude,
+            'position_id' => $hasValidPosition ? (int) $this->position_id : null,
+            'latitude' => $hasValidPosition ? ($this->latitude ?? optional($this->position)->latitude) : null,
+            'longitude' => $hasValidPosition ? ($this->longitude ?? optional($this->position)->longitude) : null,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'position' => $this->position ? new PositionResource($this->position) : null,
+            'position' => ($hasValidPosition && $this->position) ? new PositionResource($this->position) : null,
         ];
     }
 }
