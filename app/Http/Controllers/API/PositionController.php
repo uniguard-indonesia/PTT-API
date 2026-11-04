@@ -9,6 +9,7 @@ use App\Models\Position;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class PositionController extends Controller
@@ -250,7 +251,15 @@ class PositionController extends Controller
 
             $actor->position_id = $position->id;
 
-            $this->saveActivity('Updating Location', $actor->id);
+            // Activity logging is best-effort: a failure here must not turn a saved position into a 500.
+            try {
+                $this->saveActivity('Updating Location', $actor->id);
+            } catch (\Throwable $e) {
+                Log::warning('Position: failed to save activity log', [
+                    'user_id' => $actor->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
 
             return response()->json(
                 [
@@ -261,6 +270,13 @@ class PositionController extends Controller
                 200
             );
         } catch (\Throwable $e) {
+            Log::error('Position: failed to store position', [
+                'user_id' => $actor->id,
+                'exception' => get_class($e),
+                'error' => $e->getMessage(),
+                'file' => $e->getFile() . ':' . $e->getLine(),
+            ]);
+
             return response()->json(
                 [
                     'status' => 'error',
