@@ -53,8 +53,8 @@ class PositionAndLevelIsolationTest extends TestCase
             ['name' => 'Company B', 'email' => 'companyB@test.com', 'timezone_id' => $this->timezone->id]
         );
 
-        $this->level1 = Level::find(1);
-        if (!$this->level1) {
+        $level1 = Level::find(1);
+        if (!$level1) {
             DB::table('levels')->insert([
                 'id' => 1,
                 'name' => 'Role Level 1',
@@ -62,11 +62,12 @@ class PositionAndLevelIsolationTest extends TestCase
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            $this->level1 = Level::find(1);
+            $level1 = Level::find(1);
         }
+        $this->level1 = $level1;
 
-        $this->level2 = Level::find(2);
-        if (!$this->level2) {
+        $level2 = Level::find(2);
+        if (!$level2) {
             DB::table('levels')->insert([
                 'id' => 2,
                 'name' => 'Role Level 2',
@@ -74,8 +75,9 @@ class PositionAndLevelIsolationTest extends TestCase
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            $this->level2 = Level::find(2);
+            $level2 = Level::find(2);
         }
+        $this->level2 = $level2;
 
         $this->superAdmin = User::create([
             'name' => 'Super Admin Test',

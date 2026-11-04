@@ -68,12 +68,9 @@ class LogActivitiesController extends Controller
             'activity' => $request->activity
         ];
         if ($request->has('attachment')) {
-            // Dapatkan file yang diupload
             $file = $request->file('attachment');
 
-            // Buat path penyimpanan dengan nama file asli
             $fileName = $file->getClientOriginalName();
-            // $path = $file->storeAs('audio', $fileName);
             $file->move(public_path('audio/'), $fileName);
             $input['attachment'] = 'audio/' . $fileName;
         }
