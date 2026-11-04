@@ -2,6 +2,9 @@ when:
   event: push
   branch: production
 
+labels:
+  location: server-ptt
+
 steps:
   # -------------------------------------------------------
   # STEP 1: Build Image langsung di Docker Daemon Lokal VPS
@@ -102,6 +105,7 @@ steps:
             ptt-web:
                 image: ptt-web:latest
                 container_name: ptt-web
+                mem_limit: 1gb
                 volumes:
                     - ./.env:/var/www/ptt-web/.env:ro
                     - ./storage:/var/www/ptt-web/storage
