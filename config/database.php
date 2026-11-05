@@ -76,6 +76,11 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => 'prefer',
+            // pgbouncer in transaction pooling mode does not support server-side
+            // prepared statements, so let PDO emulate them client-side.
+            'options' => [
+                PDO::ATTR_EMULATE_PREPARES => env('DB_EMULATE_PREPARES', true),
+            ],
         ],
 
         'sqlsrv' => [
