@@ -7,7 +7,6 @@ use App\Http\Resources\PositionResource;
 use App\Http\Resources\UserPositionResource;
 use App\Models\Position;
 use App\Models\User;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -236,38 +235,19 @@ class PositionController extends Controller
         }
 
         try {
-            $save = function () use ($actor, $input) {
-                return DB::transaction(function () use ($actor, $input) {
-                    $pos = Position::create([
-                        'user_id' => $actor->id,
-                        'latitude' => (string) $input['latitude'],
-                        'longitude' => (string) $input['longitude'],
-                    ]);
-
-                    User::where('id', $actor->id)->update([
-                        'position_id' => $pos->id,
-                    ]);
-
-                    return $pos;
-                });
-            };
-
-            try {
-                $position = $save();
-            } catch (QueryException $e) {
-                // SQLSTATE 25P02: the pooled Postgres connection was left in an aborted
-                // transaction by an earlier failure. Reconnect and retry once.
-                if ((string) $e->getCode() !== '25P02') {
-                    throw $e;
-                }
-
-                Log::warning('Position: connection in aborted transaction, reconnecting', [
+            $position = DB::transaction(function () use ($actor, $input) {
+                $pos = Position::create([
                     'user_id' => $actor->id,
+                    'latitude' => (string) $input['latitude'],
+                    'longitude' => (string) $input['longitude'],
                 ]);
-                DB::purge();
-                DB::reconnect();
-                $position = $save();
-            }
+
+                User::where('id', $actor->id)->update([
+                    'position_id' => $pos->id,
+                ]);
+
+                return $pos;
+            });
 
             $actor->position_id = $position->id;
 
