@@ -199,6 +199,27 @@ class PositionController extends Controller
     }
 
     /**
+     * Format location update activity message with coordinate bounds and fallback.
+     *
+     * @param  string|null  $latitude
+     * @param  string|null  $longitude
+     * @return string
+     */
+    public static function formatActivityMessage(?string $latitude, ?string $longitude): string
+    {
+        $hasCoordinates = filled($latitude) && filled($longitude);
+        $message = $hasCoordinates
+            ? "Updating Location ({$latitude}, {$longitude})"
+            : 'Updating Location';
+
+        if (mb_strlen($message) > 255) {
+            $message = mb_substr($message, 0, 255);
+        }
+
+        return $message;
+    }
+
+    /**
      * Store a new position for the authenticated user.
      *
      * @param  \Illuminate\Http\Request  $request
@@ -253,7 +274,8 @@ class PositionController extends Controller
 
             // Activity logging is best-effort: a failure here must not turn a saved position into a 500.
             try {
-                $this->saveActivity('Updating Location', $actor->id);
+                $activityMessage = self::formatActivityMessage($position->latitude, $position->longitude);
+                $this->saveActivity($activityMessage, $actor->id);
             } catch (\Throwable $e) {
                 Log::warning('Position: failed to save activity log', [
                     'user_id' => $actor->id,

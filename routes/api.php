@@ -49,6 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/positions', [PositionController::class, 'getData']);
     Route::get('/position', [PositionController::class, 'getLastPositionUser']);
     Route::post('/position', [PositionController::class, 'store']);
+    Route::post('/positions', [PositionController::class, 'store']);
 
     //Activity
     Route::post('/activity', [LogActivitiesController::class, 'store']);
