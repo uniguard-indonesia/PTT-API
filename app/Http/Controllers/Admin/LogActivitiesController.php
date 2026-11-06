@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\LogActivity;
 use Illuminate\Http\Request;
 use Yajra\DataTables\DataTables;
@@ -18,28 +19,49 @@ class LogActivitiesController extends Controller
      */
     public function index(Request $request)
     {
+        $authUser = Auth::user();
+
         if ($request->wantsJson()) {
-            $query = LogActivity::with('user.company.timezone')
-                ->whereHas('user.company', function($query){
-                    $query->when(Auth::user()->level_id != 0, function($query){
-                        $query->where('company_id', Auth::user()->company_id);
+            $query = LogActivity::with('user.company.timezone');
+
+            if ($authUser && $authUser->isSuperAdmin()) {
+                if ($request->filled('company_id') && is_numeric($request->company_id) && (int) $request->company_id > 0) {
+                    $query->whereHas('user', function ($q) use ($request) {
+                        $q->where('company_id', (int) $request->company_id);
                     });
-                })
-                ->latest();
+                }
+            } else {
+                if (!$authUser || empty($authUser->company_id) || (int) $authUser->company_id <= 0) {
+                    $query->whereRaw('0 = 1');
+                } else {
+                    $query->whereHas('user', function ($q) use ($authUser) {
+                        $q->where('company_id', (int) $authUser->company_id);
+                    });
+                }
+            }
+
+            $query->latest();
+
             return DataTables::of($query)
-                ->addColumn('name', function($row){
-                    return $row->user?$row->user->name:'UNKNOWN';
+                ->addColumn('name', function ($row) {
+                    return $row->user ? $row->user->name : 'UNKNOWN';
                 })
-                ->addColumn('company', function($row){
-                    return $row->user?$row->user->company->name:'UNKNOWN';
+                ->addColumn('company', function ($row) {
+                    return ($row->user && $row->user->company) ? $row->user->company->name : 'UNKNOWN';
                 })
-                ->editColumn('created_at', function($row){
-                    return Carbon::parse(strtotime($row->created_at))->setTimezone($row->user->company->timezone->code)->isoFormat('DD MMM Y HH:mm z');
+                ->editColumn('created_at', function ($row) {
+                    $tzCode = $row->user?->company?->timezone?->code ?? config('app.timezone', 'UTC');
+                    return Carbon::parse($row->created_at)->setTimezone($tzCode)->isoFormat('DD MMM Y HH:mm z');
                 })
                 ->make(true);
         } else {
+            $companies = ($authUser && $authUser->isSuperAdmin())
+                ? Company::orderBy('name')->get(['id', 'name'])
+                : collect();
+
             $data = [
-                'title' => 'Log Activities'
+                'title' => 'Log Activities',
+                'companies' => $companies,
             ];
             return view('pages.admin.log-activities', $data);
         }
