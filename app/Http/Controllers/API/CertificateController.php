@@ -107,7 +107,7 @@ class CertificateController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Sertifikat berhasil diunggah!',
+            'message' => 'Certificate uploaded successfully.',
         ], 200);
     }
 
