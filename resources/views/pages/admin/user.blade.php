@@ -129,6 +129,7 @@
             url = "{{ route('admin.user.store') }}";
             method = 'POST';
             $('.modal-header h5').html("Create User");
+            resetPasswordVisibility('#basicModal');
             $('#basicModal').modal('show');
         }
 
@@ -148,6 +149,7 @@
                 $('select[name="level_id"]').selectpicker('val', res.data.level_id);
                 $('select[name="company_id"]').selectpicker('val', res.data.company_id);
                 $('#preview').attr('src', "{{ asset('dist/profiles') }}"+'/'+res.data.photo);
+                resetPasswordVisibility('#basicModal');
                 $('#basicModal').modal('show');
             })
         }
@@ -157,7 +159,8 @@
             $('#FormReset')[0].reset();
             let resetUrl = "{{ route('admin.user.reset', ':id') }}";
             url = resetUrl.replace(':id', id);
-            $('.modal-header h5').html("Reset Password Akun");
+            $('.modal-header h5').html("Reset Password");
+            resetPasswordVisibility('#resetModal');
             $('#resetModal').modal('show');
         }
 
@@ -170,7 +173,7 @@
                 type: 'warning',
                 showCancelButton: true,
                 confirmButtonText: 'Regenerate',
-                cancelButtonText: 'Batal',
+                cancelButtonText: 'Cancel',
                 confirmButtonColor: '#ff9800',
                 reverseButtons: true
             }).then((isConfirm) => {
@@ -205,12 +208,12 @@
             let deleteUrl = "{{ route('admin.user.destroy', ':id') }}";
             deleteUrl = deleteUrl.replace(':id', id);
             swal({
-                title: 'Hapus data ini?',
-                text: "Data ini tidak akan bisa dikembalikan!",
+                title: 'Delete this user?',
+                text: "This action cannot be undone.",
                 type: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Hapus!',
-                cancelButtonText: 'Batal',
+                confirmButtonText: 'Delete',
+                cancelButtonText: 'Cancel',
                 confirmButtonColor: '#F44336',
                 reverseButtons: true
             }).then((isConfirm) => {
@@ -258,14 +261,28 @@
         }
 
         function showPassword(that) {
-            let type = $(that).closest('.input-group').find('input').attr('type');
-            if (type == 'password') {
-                $(that).closest('.input-group').find('input').attr('type', 'text');
-                $(that).html('<i class="ti-eye"></i>');
+            let $btn = $(that).closest('button').length ? $(that).closest('button') : $(that);
+            let $input = $btn.closest('.input-group').find('input');
+            let isPassword = $input.attr('type') === 'password';
+
+            if (isPassword) {
+                $input.attr('type', 'text');
+                $btn.html('<i class="ti-eye"></i>');
+                $btn.attr('aria-label', 'Hide password');
             } else {
-                $(that).closest('.input-group').find('input').attr('type', 'password');
-                $(that).html('<i class="fas fa-eye-slash"></i>');
+                $input.attr('type', 'password');
+                $btn.html('<i class="ti-lock"></i>');
+                $btn.attr('aria-label', 'Show password');
             }
+        }
+
+        function resetPasswordVisibility(modalSelector) {
+            let $modal = $(modalSelector);
+            $modal.find('.password input').attr('type', 'password');
+            $modal.find('.password button').each(function() {
+                $(this).html('<i class="ti-lock"></i>');
+                $(this).attr('aria-label', 'Show password');
+            });
         }
         $(document).ready(function() {
             $('#basicModal').on('hide.bs.modal', function() {
@@ -275,7 +292,15 @@
                 $('.password').find('input').prop('required', true);
                 $('#Company, #Level').selectpicker('val', '');
                 $('input[name="_method"]').remove();
-            })
+                resetPasswordVisibility(this);
+            });
+            $('#resetModal').on('hide.bs.modal', function() {
+                $('#FormReset')[0].reset();
+                resetPasswordVisibility(this);
+            });
+            $('#basicModal, #resetModal').on('show.bs.modal', function() {
+                resetPasswordVisibility(this);
+            });
             $('#Level').selectpicker({
                 liveSearch: true,
                 header: "Select Level",
@@ -472,8 +497,8 @@
                                         <input type="password" id="Password" class="form-control" name="password"
                                             placeholder="******" required>
                                         <div class="input-group-append">
-                                            <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button"><i
-                                                    class="ti-eye"></i></button>
+                                            <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button" aria-label="Show password"><i
+                                                    class="ti-lock"></i></button>
                                         </div>
                                     </div>
                                 </div>
@@ -510,8 +535,8 @@
                                 <input type="password" id="NewPassword" class="form-control" name="new_password"
                                     placeholder="******" required>
                                 <div class="input-group-append">
-                                    <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button"><i
-                                            class="fa-regular fa-eye-slash"></i></button>
+                                    <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button" aria-label="Show password"><i
+                                            class="ti-lock"></i></button>
                                 </div>
                             </div>
                         </div>
@@ -521,17 +546,17 @@
                                 <input type="password" id="ConfirmPassword" class="form-control" name="confirm_password"
                                     placeholder="******" required>
                                 <div class="input-group-append">
-                                    <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button"><i
-                                            class="fa-regular fa-eye-slash"></i></button>
+                                    <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button" aria-label="Show password"><i
+                                            class="ti-lock"></i></button>
                                 </div>
                             </div>
                         </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary text-white" data-dismiss="modal">Tutup <i
-                            class="fa-solid fa-xmark"></i></button>
-                    <button type="submit" class="btn btn-success text-white">Simpan <i
-                            class="fa-solid fa-floppy-disk"></i></button>
+                    <button type="button" class="btn btn-secondary text-white" data-dismiss="modal">Close <i
+                            class="ti-close"></i></button>
+                    <button type="submit" class="btn btn-success text-white">Save <i
+                            class="ti-save"></i></button>
                     </form>
                 </div>
             </div>
