@@ -29,38 +29,65 @@ class DashboardController extends Controller
         ];
         return view("pages.dashboard", $data);
     }
-    public function markersUser()
+    public function markersUser(Request $request)
     {
         $authUser = Auth::user();
+        if (!$authUser) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
         $isSuperAdmin = $authUser->isSuperAdmin();
 
-        $data = User::select("users.*", "tz.code")
-            ->join("companies as co", "co.id", "=", "users.company_id")
-            ->join("timezones as tz", "tz.id", "=", "co.timezone_id")
-            ->whereHas("position", function ($query) {
-                $query->whereNotNull("latitude")
-                    ->where("latitude", "!=", "")
-                    ->where("latitude", "!=", "null")
-                    ->whereNotNull("longitude")
-                    ->where("longitude", "!=", "")
-                    ->where("longitude", "!=", "null");
+        // Fail-closed scoping: if non-superadmin has empty or invalid company_id, short-circuit immediately.
+        if (!$isSuperAdmin && (empty($authUser->company_id) || (int) $authUser->company_id <= 0)) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [],
+            ], 200);
+        }
+
+        // Sanitized projection: omit sensitive columns (password, remember_token)
+        $query = User::select(
+            'users.id',
+            'users.name',
+            'users.company_id',
+            'users.position_id',
+            'tz.code as code'
+        )
+            ->join('companies as co', 'co.id', '=', 'users.company_id')
+            ->leftJoin('timezones as tz', 'tz.id', '=', 'co.timezone_id')
+            ->whereHas('position', function ($query) {
+                $query->whereNotNull('latitude')
+                    ->where('latitude', '!=', '')
+                    ->where('latitude', '!=', 'null')
+                    ->whereNotNull('longitude')
+                    ->where('longitude', '!=', '')
+                    ->where('longitude', '!=', 'null');
             })
-            ->with("position")
-            ->when(!$isSuperAdmin, function ($query) use ($authUser) {
-                if (empty($authUser->company_id)) {
-                    return $query->whereRaw("0 = 1");
-                }
-                return $query->where(
-                    "users.company_id",
-                    $authUser->company_id,
-                );
-            })
-            ->get();
+            ->with(['position' => function ($q) {
+                $q->select('id', 'user_id', 'latitude', 'longitude', 'created_at');
+            }]);
+
+        if ($isSuperAdmin) {
+            // Super Admin can optionally filter by company_id query parameter
+            if ($request->filled('company_id') && is_numeric($request->company_id) && (int) $request->company_id > 0) {
+                $query->where('users.company_id', (int) $request->company_id);
+            }
+        } else {
+            // Non-superadmin is strictly locked to their assigned company_id.
+            // Any ?company_id= query parameter is strictly ignored to prevent tampering.
+            $query->where('users.company_id', (int) $authUser->company_id);
+        }
+
+        $data = $query->get();
 
         return response()->json(
             [
-                "status" => "success",
-                "data" => $data,
+                'status' => 'success',
+                'data' => $data,
             ],
             200,
         );

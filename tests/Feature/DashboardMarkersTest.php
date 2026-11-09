@@ -251,4 +251,166 @@ class DashboardMarkersTest extends TestCase
         $this->assertNotContains($userEmptyLng->id, $returnedUserIds);
         $this->assertNotContains($userNoPos->id, $returnedUserIds);
     }
+
+    public function test_dashboard_view_contains_marker_auto_refresh_script_contracts(): void
+    {
+        $response = $this->actingAs($this->superAdmin)->get(route('auth.dashboard'));
+
+        $response->assertOk()
+            ->assertViewIs('pages.dashboard');
+
+        $content = $response->getContent();
+
+        // 1. Periodic Polling: 10 second interval configured with setInterval
+        $this->assertMatchesRegularExpression('/(?:pollInterval(?:Ms)?\s*=\s*10000|setInterval\([^,]+,\s*10000\))/', $content, 'Must configure 10 second polling interval');
+        $this->assertStringContainsString('setInterval', $content, 'Must initiate periodic polling using setInterval');
+
+        // 2. Preserve Map Viewport: guard fitBounds/setView with isInitialLoad so subsequent intervals do not reset pan/zoom
+        $this->assertMatchesRegularExpression('/isInitialLoad/', $content, 'Must track initial load state to preserve map viewport');
+        $this->assertMatchesRegularExpression('/if\s*\(\s*isInitialLoad\s*\)/', $content, 'Must guard fitBounds so it only runs on initial load');
+
+        // 3. Marker State Handling: Update existing marker positions and popups by ID instead of clearing layers
+        $this->assertStringNotContainsString('markersLayer.clearLayers()', $content, 'Must not clear all markers on every poll');
+        $this->assertMatchesRegularExpression('/markersById|markersMap/', $content, 'Must index markers by ID');
+        $this->assertStringContainsString('.setLatLng(', $content, 'Must update existing marker coordinates with setLatLng');
+        $this->assertStringContainsString('.setPopupContent(', $content, 'Must update popup timestamp using setPopupContent');
+
+        // 4. Cleanup: clear interval and abort active request on pagehide or beforeunload
+        $this->assertStringContainsString('clearInterval', $content, 'Must clear timer interval');
+        $this->assertStringContainsString('beforeunload', $content, 'Must clean up on beforeunload');
+        $this->assertStringContainsString('pagehide', $content, 'Must clean up on pagehide');
+    }
+
+    public function test_company_admin_cannot_override_company_filter_via_query_parameter(): void
+    {
+        // Device A in Company A
+        $posA = Position::create([
+            'user_id' => $this->companyAdminA->id,
+            'latitude' => '-31.9505',
+            'longitude' => '115.8605',
+        ]);
+        $this->companyAdminA->update(['position_id' => $posA->id]);
+
+        // Device B in Company B
+        $posB = Position::create([
+            'user_id' => $this->companyAdminB->id,
+            'latitude' => '-33.8688',
+            'longitude' => '151.2093',
+        ]);
+        $this->companyAdminB->update(['position_id' => $posB->id]);
+
+        // Company Admin A attempts to tamper by querying Company B's pins
+        $tamperedUrl = route('auth.dashboard.markers') . '?company_id=' . $this->companyB->id;
+        $response = $this->actingAs($this->companyAdminA)->getJson($tamperedUrl);
+
+        $response->assertOk()
+            ->assertJson(['status' => 'success']);
+
+        $returnedUserIds = collect($response->json('data'))->pluck('id')->all();
+
+        // Must still only see Company A, and never Company B
+        $this->assertContains($this->companyAdminA->id, $returnedUserIds);
+        $this->assertNotContains($this->companyAdminB->id, $returnedUserIds);
+    }
+
+    public function test_non_superadmin_with_empty_or_zero_company_id_returns_empty_array_immediately(): void
+    {
+        $pos = Position::create([
+            'user_id' => $this->regularUserA->id,
+            'latitude' => '-31.9505',
+            'longitude' => '115.8605',
+        ]);
+        $this->regularUserA->update(['position_id' => $pos->id]);
+
+        // User without company (company_id = 0)
+        $userWithoutCompany = $this->createUserWithoutRegistration([
+            'name' => 'Homeless User',
+            'email' => 'homeless_' . uniqid() . '@test.com',
+            'password' => bcrypt('password123'),
+            'level_id' => $this->levelUser->id,
+            'company_id' => 0,
+            'position_id' => $pos->id,
+        ]);
+
+        $response = $this->actingAs($userWithoutCompany)->getJson(route('auth.dashboard.markers'));
+
+        $response->assertOk()
+            ->assertJson([
+                'status' => 'success',
+                'data' => [],
+            ]);
+
+        $this->assertEmpty($response->json('data'));
+
+        // Also test null company_id in-memory attribute
+        $userWithoutCompany->company_id = null;
+        $responseNull = $this->actingAs($userWithoutCompany)->getJson(route('auth.dashboard.markers'));
+        $responseNull->assertOk()
+            ->assertJson([
+                'status' => 'success',
+                'data' => [],
+            ]);
+        $this->assertEmpty($responseNull->json('data'));
+    }
+
+    public function test_markers_payload_does_not_leak_sensitive_columns(): void
+    {
+        $pos = Position::create([
+            'user_id' => $this->companyAdminA->id,
+            'latitude' => '-31.9505',
+            'longitude' => '115.8605',
+        ]);
+        $this->companyAdminA->update(['position_id' => $pos->id]);
+
+        $response = $this->actingAs($this->companyAdminA)->getJson(route('auth.dashboard.markers'));
+
+        $response->assertOk();
+        $data = $response->json('data');
+        $this->assertNotEmpty($data);
+
+        foreach ($data as $item) {
+            $this->assertArrayNotHasKey('password', $item, 'Response payload must never expose user password hash');
+            $this->assertArrayNotHasKey('remember_token', $item, 'Response payload must never expose remember_token');
+            $this->assertArrayHasKey('id', $item);
+            $this->assertArrayHasKey('name', $item);
+            $this->assertArrayHasKey('position', $item);
+        }
+    }
+
+    public function test_super_admin_can_filter_markers_by_company_id_query_parameter(): void
+    {
+        // Device A in Company A
+        $posA = Position::create([
+            'user_id' => $this->companyAdminA->id,
+            'latitude' => '-31.9505',
+            'longitude' => '115.8605',
+        ]);
+        $this->companyAdminA->update(['position_id' => $posA->id]);
+
+        // Device B in Company B
+        $posB = Position::create([
+            'user_id' => $this->companyAdminB->id,
+            'latitude' => '-33.8688',
+            'longitude' => '151.2093',
+        ]);
+        $this->companyAdminB->update(['position_id' => $posB->id]);
+
+        // Super Admin filters explicitly by Company B
+        $filterUrl = route('auth.dashboard.markers') . '?company_id=' . $this->companyB->id;
+        $response = $this->actingAs($this->superAdmin)->getJson($filterUrl);
+
+        $response->assertOk()
+            ->assertJson(['status' => 'success']);
+
+        $returnedUserIds = collect($response->json('data'))->pluck('id')->all();
+        $this->assertContains($this->companyAdminB->id, $returnedUserIds);
+        $this->assertNotContains($this->companyAdminA->id, $returnedUserIds);
+    }
+
+    public function test_unauthenticated_request_to_markers_is_rejected(): void
+    {
+        $response = $this->getJson(route('auth.dashboard.markers'));
+
+        $response->assertStatus(401);
+    }
 }

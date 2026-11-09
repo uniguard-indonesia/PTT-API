@@ -68,86 +68,166 @@
         });
         var layerControl = L.control.layers(baseMaps).addTo(map);
         var markersLayer = new L.LayerGroup().addTo(map);
+        var markersById = {};
+        var isInitialLoad = true;
+        var markersTimer = null;
+        var pollIntervalMs = 10000;
+        var isFetchingMarkers = false;
+        var activeMarkersXhr = null;
+
+        function createPopupContent(name, formattedTime) {
+            var popupContent = document.createElement('div');
+            popupContent.appendChild(document.createTextNode(name || ''));
+            popupContent.appendChild(document.createElement('br'));
+            popupContent.appendChild(document.createTextNode(formattedTime || ''));
+            return popupContent;
+        }
+
+        function onClick(e) {
+            var popup = e.target.getPopup();
+            var content = popup ? popup.getContent() : null;
+        }
 
         function markersUser() {
-            markersLayer.clearLayers();
-            var latLngs = [];
+            if (isFetchingMarkers) {
+                return;
+            }
+            isFetchingMarkers = true;
 
-            $.get("{{ route('auth.dashboard.markers') }}", function(res) {
-                if (res && res.data && Array.isArray(res.data)) {
-                    $.each(res.data, function(idx, val) {
-                        if (
-                            val &&
-                            val.position &&
-                            (typeof val.position.latitude === 'number' ||
-                                (typeof val.position.latitude === 'string' && val.position.latitude.trim() !== '')) &&
-                            (typeof val.position.longitude === 'number' ||
-                                (typeof val.position.longitude === 'string' && val.position.longitude.trim() !== ''))
-                        ) {
-                            var lat = Number(val.position.latitude);
-                            var lng = Number(val.position.longitude);
+            activeMarkersXhr = $.ajax({
+                url: "{{ route('auth.dashboard.markers') }}",
+                method: "GET",
+                dataType: "json",
+                success: function(res) {
+                    var currentIds = {};
+                    var latLngs = [];
 
+                    if (res && res.data && Array.isArray(res.data)) {
+                        $.each(res.data, function(idx, val) {
                             if (
-                                Number.isFinite(lat) &&
-                                Number.isFinite(lng) &&
-                                lat >= -90 &&
-                                lat <= 90 &&
-                                lng >= -180 &&
-                                lng <= 180
+                                val &&
+                                val.position &&
+                                (typeof val.position.latitude === 'number' ||
+                                    (typeof val.position.latitude === 'string' && val.position.latitude.trim() !== '')) &&
+                                (typeof val.position.longitude === 'number' ||
+                                    (typeof val.position.longitude === 'string' && val.position.longitude.trim() !== ''))
                             ) {
-                                var formattedTime = '';
-                                if (val.position.created_at) {
-                                    try {
-                                        formattedTime = val.code
-                                            ? moment(val.position.created_at).tz(val.code).format('DD MMM YYYY HH:mm z')
-                                            : moment(val.position.created_at).format('DD MMM YYYY HH:mm');
-                                    } catch (e) {
-                                        formattedTime = moment(val.position.created_at).format('DD MMM YYYY HH:mm');
+                                var lat = Number(val.position.latitude);
+                                var lng = Number(val.position.longitude);
+
+                                if (
+                                    Number.isFinite(lat) &&
+                                    Number.isFinite(lng) &&
+                                    lat >= -90 &&
+                                    lat <= 90 &&
+                                    lng >= -180 &&
+                                    lng <= 180
+                                ) {
+                                    var deviceId = val.id != null ? val.id : (val.position && val.position.id ? val.position.id : idx);
+                                    currentIds[deviceId] = true;
+
+                                    var formattedTime = '';
+                                    if (val.position.created_at) {
+                                        try {
+                                            formattedTime = val.code
+                                                ? moment(val.position.created_at).tz(val.code).format('DD MMM YYYY HH:mm z')
+                                                : moment(val.position.created_at).format('DD MMM YYYY HH:mm');
+                                        } catch (e) {
+                                            formattedTime = moment(val.position.created_at).format('DD MMM YYYY HH:mm');
+                                        }
                                     }
+
+                                    var popupContent = createPopupContent(val.name, formattedTime);
+
+                                    if (markersById[deviceId]) {
+                                        var existingMarker = markersById[deviceId];
+                                        var currentLatLng = existingMarker.getLatLng();
+                                        if (currentLatLng.lat !== lat || currentLatLng.lng !== lng) {
+                                            existingMarker.setLatLng([lat, lng]);
+                                        }
+                                        existingMarker.setPopupContent(popupContent);
+                                    } else {
+                                        var marker = L.marker([lat, lng])
+                                            .bindPopup(popupContent)
+                                            .on('click', onClick);
+
+                                        markersLayer.addLayer(marker);
+                                        markersById[deviceId] = marker;
+                                    }
+
+                                    latLngs.push([lat, lng]);
                                 }
-
-                                var popupContent = document.createElement('div');
-                                popupContent.appendChild(document.createTextNode(val.name || ''));
-                                popupContent.appendChild(document.createElement('br'));
-                                popupContent.appendChild(document.createTextNode(formattedTime));
-
-                                var marker = L.marker([lat, lng])
-                                    .bindPopup(popupContent)
-                                    .on('click', onClick);
-
-                                markersLayer.addLayer(marker);
-                                latLngs.push([lat, lng]);
                             }
+                        });
+                    }
+
+                    // Remove markers for devices that are no longer returned
+                    Object.keys(markersById).forEach(function(id) {
+                        if (!currentIds[id]) {
+                            markersLayer.removeLayer(markersById[id]);
+                            delete markersById[id];
                         }
                     });
-                }
 
-                function onClick(e) {
-                    var popup = e.target.getPopup();
-                    var content = popup.getContent();
-                }
+                    if (!map.hasLayer(markersLayer)) {
+                        markersLayer.addTo(map);
+                    }
 
-                if (!map.hasLayer(markersLayer)) {
-                    markersLayer.addTo(map);
-                }
-
-                if (latLngs.length === 0) {
-                    map.setView(defaultCenter, defaultZoom);
-                } else if (latLngs.length === 1) {
-                    map.flyTo(latLngs[0], 14);
-                } else {
-                    var bounds = L.latLngBounds(latLngs);
-                    map.fitBounds(bounds, {
-                        padding: [50, 50],
-                        maxZoom: 16
-                    });
+                    // Only auto-center / fitBounds on the initial page load
+                    if (isInitialLoad) {
+                        if (latLngs.length === 0) {
+                            map.setView(defaultCenter, defaultZoom);
+                        } else if (latLngs.length === 1) {
+                            map.flyTo(latLngs[0], 14);
+                        } else {
+                            var bounds = L.latLngBounds(latLngs);
+                            map.fitBounds(bounds, {
+                                padding: [50, 50],
+                                maxZoom: 16
+                            });
+                        }
+                        isInitialLoad = false;
+                    }
+                },
+                complete: function() {
+                    isFetchingMarkers = false;
+                    activeMarkersXhr = null;
                 }
             });
         }
 
+        function startMarkersPolling() {
+            stopMarkersPolling();
+            markersTimer = setInterval(function() {
+                markersUser();
+            }, pollIntervalMs);
+        }
+
+        function stopMarkersPolling() {
+            if (markersTimer) {
+                clearInterval(markersTimer);
+                markersTimer = null;
+            }
+            if (activeMarkersXhr && typeof activeMarkersXhr.abort === 'function') {
+                activeMarkersXhr.abort();
+                activeMarkersXhr = null;
+            }
+            isFetchingMarkers = false;
+        }
+
+        function refreshMarkers() {
+            markersUser();
+            startMarkersPolling();
+        }
+
+        // Cleanup timer and any in-flight request when navigating away
+        window.addEventListener('beforeunload', stopMarkersPolling);
+        window.addEventListener('pagehide', stopMarkersPolling);
+
         $(document).ready(function() {
             markersUser();
-        })
+            startMarkersPolling();
+        });
     </script>
 @endpush
 @section('content')
@@ -225,7 +305,7 @@
                                             <h5 class="card-title">User Location</h5>
                                         </div>
                                         <div class="col-md-6">
-                                            <button class="btn btn-sm btn-primary float-right" onclick="markersUser()"><i
+                                            <button class="btn btn-sm btn-primary float-right" onclick="refreshMarkers()"><i
                                                     class="fas fa-sync"></i> Refresh</button>
                                         </div>
                                     </div>
