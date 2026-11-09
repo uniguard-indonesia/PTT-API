@@ -38,7 +38,7 @@
                 });
             }
         }
-        let googleTile = L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+        let googleTile = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}&hl=en', {
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
             attribution: ''
@@ -46,11 +46,11 @@
         let osmTile = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         });
-        let googleTerrain = L.tileLayer('http://{s}.google.com/vt?lyrs=p&x={x}&y={y}&z={z}', {
+        let googleTerrain = L.tileLayer('https://{s}.google.com/vt?lyrs=p&x={x}&y={y}&z={z}&hl=en', {
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
         });
-        let googleSat = L.tileLayer('http://{s}.google.com/vt?lyrs=s&x={x}&y={y}&z={z}', {
+        let googleSat = L.tileLayer('https://{s}.google.com/vt?lyrs=s&x={x}&y={y}&z={z}&hl=en', {
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
         });
@@ -64,7 +64,7 @@
         var map = L.map('map', {
             center: defaultCenter,
             zoom: defaultZoom,
-            layers: [osmTile, googleTile]
+            layers: [googleTile]
         });
         var layerControl = L.control.layers(baseMaps).addTo(map);
         var markersLayer = new L.LayerGroup().addTo(map);
@@ -74,6 +74,7 @@
         var pollIntervalMs = 10000;
         var isFetchingMarkers = false;
         var activeMarkersXhr = null;
+        var isMarkersPollingDisabled = false;
 
         function createPopupContent(name, formattedTime) {
             var popupContent = document.createElement('div');
@@ -83,13 +84,8 @@
             return popupContent;
         }
 
-        function onClick(e) {
-            var popup = e.target.getPopup();
-            var content = popup ? popup.getContent() : null;
-        }
-
         function markersUser() {
-            if (isFetchingMarkers) {
+            if (isFetchingMarkers || isMarkersPollingDisabled) {
                 return;
             }
             isFetchingMarkers = true;
@@ -148,8 +144,7 @@
                                         existingMarker.setPopupContent(popupContent);
                                     } else {
                                         var marker = L.marker([lat, lng])
-                                            .bindPopup(popupContent)
-                                            .on('click', onClick);
+                                            .bindPopup(popupContent);
 
                                         markersLayer.addLayer(marker);
                                         markersById[deviceId] = marker;
@@ -189,6 +184,18 @@
                         isInitialLoad = false;
                     }
                 },
+                error: function(xhr, textStatus) {
+                    if (textStatus === 'abort') {
+                        return;
+                    }
+
+                    var status = xhr ? xhr.status : 0;
+                    if (status === 401 || status === 419 || textStatus === 'parsererror') {
+                        isMarkersPollingDisabled = true;
+                        clearMarkersPollingTimer();
+                        notification('error', 'Your session has expired. Please reload the dashboard.');
+                    }
+                },
                 complete: function() {
                     isFetchingMarkers = false;
                     activeMarkersXhr = null;
@@ -196,18 +203,25 @@
             });
         }
 
+        function clearMarkersPollingTimer() {
+            if (markersTimer) {
+                clearInterval(markersTimer);
+                markersTimer = null;
+            }
+        }
+
         function startMarkersPolling() {
-            stopMarkersPolling();
+            clearMarkersPollingTimer();
+            if (isMarkersPollingDisabled) {
+                return;
+            }
             markersTimer = setInterval(function() {
                 markersUser();
             }, pollIntervalMs);
         }
 
         function stopMarkersPolling() {
-            if (markersTimer) {
-                clearInterval(markersTimer);
-                markersTimer = null;
-            }
+            clearMarkersPollingTimer();
             if (activeMarkersXhr && typeof activeMarkersXhr.abort === 'function') {
                 activeMarkersXhr.abort();
                 activeMarkersXhr = null;
@@ -223,6 +237,15 @@
         // Cleanup timer and any in-flight request when navigating away
         window.addEventListener('beforeunload', stopMarkersPolling);
         window.addEventListener('pagehide', stopMarkersPolling);
+
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                clearMarkersPollingTimer();
+            } else if (!isMarkersPollingDisabled) {
+                markersUser();
+                startMarkersPolling();
+            }
+        });
 
         $(document).ready(function() {
             markersUser();

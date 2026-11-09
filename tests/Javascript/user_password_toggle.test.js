@@ -15,17 +15,17 @@ describe('User Modals Password Visibility Toggle Logic', () => {
 
         mockButtons = {
             password: {
-                htmlContent: '<i class="ti-lock"></i>',
+                htmlContent: '<i class="fa fa-eye"></i>',
                 ariaLabel: 'Show password',
                 inputKey: 'password'
             },
             new_password: {
-                htmlContent: '<i class="ti-lock"></i>',
+                htmlContent: '<i class="fa fa-eye"></i>',
                 ariaLabel: 'Show password',
                 inputKey: 'new_password'
             },
             confirm_password: {
-                htmlContent: '<i class="ti-lock"></i>',
+                htmlContent: '<i class="fa fa-eye"></i>',
                 ariaLabel: 'Show password',
                 inputKey: 'confirm_password'
             }
@@ -37,11 +37,11 @@ describe('User Modals Password Visibility Toggle Logic', () => {
         const inputObj = mockInputs[btnObj.inputKey];
         if (inputObj.type === 'password') {
             inputObj.type = 'text';
-            btnObj.htmlContent = '<i class="ti-eye"></i>';
+            btnObj.htmlContent = '<i class="fa fa-eye-slash"></i>';
             btnObj.ariaLabel = 'Hide password';
         } else {
             inputObj.type = 'password';
-            btnObj.htmlContent = '<i class="ti-lock"></i>';
+            btnObj.htmlContent = '<i class="fa fa-eye"></i>';
             btnObj.ariaLabel = 'Show password';
         }
     }
@@ -52,7 +52,7 @@ describe('User Modals Password Visibility Toggle Logic', () => {
             mockInputs[key].type = 'password';
         });
         Object.keys(mockButtons).forEach(key => {
-            mockButtons[key].htmlContent = '<i class="ti-lock"></i>';
+            mockButtons[key].htmlContent = '<i class="fa fa-eye"></i>';
             mockButtons[key].ariaLabel = 'Show password';
         });
     }
@@ -61,23 +61,23 @@ describe('User Modals Password Visibility Toggle Logic', () => {
         setupMockDOM();
     });
 
-    test('showPassword toggles from masked to revealed with ti-eye and Hide password aria-label', () => {
+    test('showPassword toggles from masked to revealed with eye-slash and Hide password aria-label', () => {
         const btn = mockButtons.password;
         const input = mockInputs.password;
 
         assert.strictEqual(input.type, 'password');
-        assert.strictEqual(btn.htmlContent, '<i class="ti-lock"></i>');
+        assert.strictEqual(btn.htmlContent, '<i class="fa fa-eye"></i>');
         assert.strictEqual(btn.ariaLabel, 'Show password');
 
         // User clicks toggle to show password
         showPassword(btn);
 
         assert.strictEqual(input.type, 'text');
-        assert.strictEqual(btn.htmlContent, '<i class="ti-eye"></i>');
+        assert.strictEqual(btn.htmlContent, '<i class="fa fa-eye-slash"></i>');
         assert.strictEqual(btn.ariaLabel, 'Hide password');
     });
 
-    test('showPassword toggles from revealed back to masked with ti-lock and Show password aria-label', () => {
+    test('showPassword toggles from revealed back to masked with eye and Show password aria-label', () => {
         const btn = mockButtons.new_password;
         const input = mockInputs.new_password;
 
@@ -88,7 +88,7 @@ describe('User Modals Password Visibility Toggle Logic', () => {
         // Second click: mask
         showPassword(btn);
         assert.strictEqual(input.type, 'password');
-        assert.strictEqual(btn.htmlContent, '<i class="ti-lock"></i>');
+        assert.strictEqual(btn.htmlContent, '<i class="fa fa-eye"></i>');
         assert.strictEqual(btn.ariaLabel, 'Show password');
     });
 
@@ -109,13 +109,12 @@ describe('User Modals Password Visibility Toggle Logic', () => {
         assert.strictEqual(mockInputs.new_password.type, 'password');
         assert.strictEqual(mockInputs.confirm_password.type, 'password');
 
-        assert.strictEqual(mockButtons.password.htmlContent, '<i class="ti-lock"></i>');
-        assert.strictEqual(mockButtons.new_password.htmlContent, '<i class="ti-lock"></i>');
-        assert.strictEqual(mockButtons.confirm_password.htmlContent, '<i class="ti-lock"></i>');
+        assert.strictEqual(mockButtons.password.htmlContent, '<i class="fa fa-eye"></i>');
+        assert.strictEqual(mockButtons.new_password.htmlContent, '<i class="fa fa-eye"></i>');
+        assert.strictEqual(mockButtons.confirm_password.htmlContent, '<i class="fa fa-eye"></i>');
 
         assert.strictEqual(mockButtons.password.ariaLabel, 'Show password');
         assert.strictEqual(mockButtons.new_password.ariaLabel, 'Show password');
         assert.strictEqual(mockButtons.confirm_password.ariaLabel, 'Show password');
     });
 });
-

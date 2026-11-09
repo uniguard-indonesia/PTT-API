@@ -73,8 +73,13 @@ class DashboardController extends Controller
 
         if ($isSuperAdmin) {
             // Super Admin can optionally filter by company_id query parameter
-            if ($request->filled('company_id') && is_numeric($request->company_id) && (int) $request->company_id > 0) {
-                $query->where('users.company_id', (int) $request->company_id);
+            $companyId = $request->input('company_id');
+            if (
+                $request->filled('company_id') &&
+                (is_int($companyId) || (is_string($companyId) && filter_var($companyId, FILTER_VALIDATE_INT) !== false)) &&
+                (int) $companyId > 0
+            ) {
+                $query->where('users.company_id', (int) $companyId);
             }
         } else {
             // Non-superadmin is strictly locked to their assigned company_id.

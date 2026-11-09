@@ -128,7 +128,7 @@
         function create() {
             url = "{{ route('admin.user.store') }}";
             method = 'POST';
-            $('.modal-header h5').html("Create User");
+            $('#basicModal .modal-header h5').html("Create User");
             resetPasswordVisibility('#basicModal');
             $('#basicModal').modal('show');
         }
@@ -143,7 +143,7 @@
             $('.password').css('display', 'none');
             $('.password').find('input').prop('required', false);
             $.get(editUrl, function(res) {
-                $('.modal-header h5').html("Edit User");
+                $('#basicModal .modal-header h5').html("Edit User");
                 $('input[name="name"]').val(res.data.name);
                 $('input[name="email"]').val(res.data.email);
                 $('select[name="level_id"]').selectpicker('val', res.data.level_id);
@@ -159,7 +159,7 @@
             $('#FormReset')[0].reset();
             let resetUrl = "{{ route('admin.user.reset', ':id') }}";
             url = resetUrl.replace(':id', id);
-            $('.modal-header h5').html("Reset Password");
+            $('#resetModal .modal-header h5').html("Reset Password");
             resetPasswordVisibility('#resetModal');
             $('#resetModal').modal('show');
         }
@@ -267,11 +267,11 @@
 
             if (isPassword) {
                 $input.attr('type', 'text');
-                $btn.html('<i class="ti-eye"></i>');
+                $btn.html('<i class="fa fa-eye-slash" aria-hidden="true"></i>');
                 $btn.attr('aria-label', 'Hide password');
             } else {
                 $input.attr('type', 'password');
-                $btn.html('<i class="ti-lock"></i>');
+                $btn.html('<i class="fa fa-eye" aria-hidden="true"></i>');
                 $btn.attr('aria-label', 'Show password');
             }
         }
@@ -280,7 +280,7 @@
             let $modal = $(modalSelector);
             $modal.find('.password input').attr('type', 'password');
             $modal.find('.password button').each(function() {
-                $(this).html('<i class="ti-lock"></i>');
+                $(this).html('<i class="fa fa-eye" aria-hidden="true"></i>');
                 $(this).attr('aria-label', 'Show password');
             });
         }
@@ -498,7 +498,7 @@
                                             placeholder="******" required>
                                         <div class="input-group-append">
                                             <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button" aria-label="Show password"><i
-                                                    class="ti-lock"></i></button>
+                                                    class="fa fa-eye" aria-hidden="true"></i></button>
                                         </div>
                                     </div>
                                 </div>
@@ -536,7 +536,7 @@
                                     placeholder="******" required>
                                 <div class="input-group-append">
                                     <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button" aria-label="Show password"><i
-                                            class="ti-lock"></i></button>
+                                            class="fa fa-eye" aria-hidden="true"></i></button>
                                 </div>
                             </div>
                         </div>
@@ -547,7 +547,7 @@
                                     placeholder="******" required>
                                 <div class="input-group-append">
                                     <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button" aria-label="Show password"><i
-                                            class="ti-lock"></i></button>
+                                            class="fa fa-eye" aria-hidden="true"></i></button>
                                 </div>
                             </div>
                         </div>
