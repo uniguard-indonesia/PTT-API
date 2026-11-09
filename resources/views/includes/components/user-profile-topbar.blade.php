@@ -1,6 +1,12 @@
+@php
+    $photo = Auth::user()->photo;
+    $photo = $photo && basename($photo) === $photo && is_file(public_path('dist/profiles/' . $photo))
+        ? $photo
+        : 'default.jpg';
+@endphp
 <li class="user-profile header-notification">
     <a href="#!" class="waves-effect waves-light">
-        <img src="{{ asset('dist/profiles/'.Auth::user()->photo) }}" class="img-radius" alt="User-Profile-Image">
+        <img src="{{ asset('dist/profiles/' . $photo) }}" class="img-radius" alt="User-Profile-Image">
         <span>{{ Auth::user()->name }}</span>
         <i class="ti-angle-down"></i>
     </a>

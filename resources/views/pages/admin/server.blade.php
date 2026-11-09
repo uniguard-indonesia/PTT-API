@@ -120,7 +120,8 @@
         function create() {
             url = "{{ route('admin.server.store') }}";
             method = 'POST';
-            $('.modal-header h5').html("Create Server");
+            $('#basicModal .modal-header h5').html("Create Server");
+            resetPasswordVisibility('#basicModal');
             @if (Auth::user()->level_id != 0)
                 $('#Companies').selectpicker('val', ['{{ Auth::user()->company_id }}']);
             @endif
@@ -135,7 +136,7 @@
             method = "POST";
             $('.modal-body form').append('<input type="hidden" name="_method" value="PUT" />');
             $.get(editUrl, function(res) {
-                $('.modal-header h5').html("Edit Server");
+                $('#basicModal .modal-header h5').html("Edit Server");
                 let companies = [];
                 $.each(res.data.companies, function(idx, item) {
                     companies.push(item.id);
@@ -151,6 +152,7 @@
                 $('input[name="host"]').val(res.data.host);
                 $('input[name="port"]').val(res.data.port);
                 $('input[name="password"]').val(res.data.password);
+                resetPasswordVisibility('#basicModal');
                 $('#basicModal').modal('show');
             })
         }
@@ -212,15 +214,28 @@
         }
 
         function showPassword(that) {
-            let type = $(that).closest('.input-group').find('input');
-            if (type.attr('type') == 'password') {
-                type.attr('type', 'text');
-                $(that).html('<i class="fas fa-eye"></i>');
+            let $btn = $(that).closest('button').length ? $(that).closest('button') : $(that);
+            let $input = $btn.closest('.input-group').find('input');
+            if ($input.attr('type') === 'password') {
+                $input.attr('type', 'text');
+                $btn.html('<i class="fa fa-eye-slash" aria-hidden="true"></i>');
+                $btn.attr('aria-label', 'Hide password');
             } else {
-                type.attr('type', 'password');
-                $(that).html('<i class="fas fa-eye-slash"></i>');
+                $input.attr('type', 'password');
+                $btn.html('<i class="fa fa-eye" aria-hidden="true"></i>');
+                $btn.attr('aria-label', 'Show password');
             }
         }
+
+        function resetPasswordVisibility(modalSelector) {
+            let $modal = $(modalSelector);
+            $modal.find('.password input').attr('type', 'password');
+            $modal.find('.password button').each(function() {
+                $(this).html('<i class="fa fa-eye" aria-hidden="true"></i>');
+                $(this).attr('aria-label', 'Show password');
+            });
+        }
+
         $(document).ready(function() {
             $('#basicModal').on('hide.bs.modal', function() {
                 $('.modal-body form')[0].reset();
@@ -230,7 +245,11 @@
                     $('#Companies').selectpicker('val', '');
                 @endif
                 $('input[name="_method"]').remove();
-            })
+                resetPasswordVisibility(this);
+            });
+            $('#basicModal').on('show.bs.modal', function() {
+                resetPasswordVisibility(this);
+            });
             $('#Companies').selectpicker({
                 liveSearch: true,
                 header: "Select Companies",
@@ -352,8 +371,8 @@
                                     <input type="password" id="Password" class="form-control" name="password"
                                         placeholder="******">
                                     <div class="input-group-append">
-                                        <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button"><i
-                                                class="fas fa-eye"></i></button>
+                                        <button onclick="showPassword(this)" class="btn btn-outline-dark" type="button" aria-label="Show password"><i
+                                                class="fa fa-eye" aria-hidden="true"></i></button>
                                     </div>
                                 </div>
                             </div>

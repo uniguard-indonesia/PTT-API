@@ -1,289 +1,453 @@
 const { test, describe, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 
-describe('Dashboard Markers Auto-Refresh Client Logic', () => {
-    let mockMap;
-    let mockMarkersLayer;
-    let markersById;
-    let isInitialLoad;
-    let markersTimer;
-    let pollIntervalMs;
-    let isFetchingMarkers;
-    let activeMarkersXhr;
-    let ajaxHandler;
+const dashboardBladePath = path.resolve(__dirname, '../../resources/views/pages/dashboard.blade.php');
+const dashboardBladeSource = fs.readFileSync(dashboardBladePath, 'utf8');
 
-    // Factory to recreate the dashboard logic environment
-    function setupEnvironment() {
-        markersById = {};
-        isInitialLoad = true;
-        markersTimer = null;
-        pollIntervalMs = 10000;
-        isFetchingMarkers = false;
-        activeMarkersXhr = null;
+function extractDashboardScript(source) {
+    const scripts = [...source.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+    assert.ok(scripts.length > 0, 'Expected inline <script> block in dashboard.blade.php');
+    return scripts[scripts.length - 1][1]
+        .replace(/\{\{\s*route\(['"]auth\.dashboard\.markers['"]\)\s*\}\}/g, '/dashboard/markers');
+}
 
-        mockMap = {
-            setViewCalls: [],
-            flyToCalls: [],
-            fitBoundsCalls: [],
-            setView(center, zoom) { this.setViewCalls.push({ center, zoom }); },
-            flyTo(center, zoom) { this.flyToCalls.push({ center, zoom }); },
-            fitBounds(bounds, options) { this.fitBoundsCalls.push({ bounds, options }); },
-            hasLayer(layer) { return true; }
-        };
+function createDashboardHarness() {
+    let timerSeq = 1;
+    const intervals = new Map();
+    const clearIntervalCalls = [];
+    const windowListeners = {};
+    const documentListeners = {};
+    const toastrCalls = [];
+    const ajaxCalls = [];
+    const createdMarkers = [];
+    const mapCalls = {
+        setView: [],
+        flyTo: [],
+        fitBounds: [],
+        initialLayers: [],
+        tileLayers: []
+    };
+    const layerCalls = {
+        added: [],
+        removed: [],
+        clearedCount: 0
+    };
+    let readyCallback = null;
 
-        mockMarkersLayer = {
-            layers: [],
-            addLayer(layer) { this.layers.push(layer); },
-            removeLayer(layer) {
-                const idx = this.layers.indexOf(layer);
-                if (idx !== -1) this.layers.splice(idx, 1);
-            },
-            clearLayersCalls: 0,
-            clearLayers() { this.clearLayersCalls++; this.layers = []; }
-        };
-    }
-
-    function createMockMarker(latLng) {
-        return {
-            latLng: latLng,
+    const createMockMarker = (latLng) => {
+        const marker = {
+            latLng,
             popupContent: null,
-            popupIsOpen: false,
-            clickHandlers: [],
-            getLatLng() { return { lat: this.latLng[0], lng: this.latLng[1] }; },
-            setLatLng(newLatLng) { this.latLng = newLatLng; },
-            bindPopup(content) { this.popupContent = content; return this; },
-            setPopupContent(content) { this.popupContent = content; return this; },
-            isPopupOpen() { return this.popupIsOpen; },
-            openPopup() { this.popupIsOpen = true; return this; },
-            closePopup() { this.popupIsOpen = false; return this; },
-            on(evt, handler) {
-                if (evt === 'click') this.clickHandlers.push(handler);
+            popupOpen: false,
+            handlers: {},
+            getLatLng() {
+                return { lat: this.latLng[0], lng: this.latLng[1] };
+            },
+            setLatLng(next) {
+                this.latLng = next;
+                return this;
+            },
+            bindPopup(content) {
+                this.popupContent = content;
+                return this;
+            },
+            setPopupContent(content) {
+                this.popupContent = content;
+                return this;
+            },
+            getPopup() {
+                return { getContent: () => this.popupContent };
+            },
+            isPopupOpen() {
+                return this.popupOpen;
+            },
+            openPopup() {
+                this.popupOpen = true;
+                return this;
+            },
+            on(evt, fn) {
+                this.handlers[evt] = fn;
                 return this;
             }
         };
-    }
+        createdMarkers.push(marker);
+        return marker;
+    };
 
-    function createPopupContent(name, formattedTime) {
-        return {
-            name: name || '',
-            formattedTime: formattedTime || '',
-            toString() { return `${this.name} - ${this.formattedTime}`; }
+    const mockLayerGroup = {
+        addTo() { return this; },
+        addLayer(layer) { layerCalls.added.push(layer); },
+        removeLayer(layer) { layerCalls.removed.push(layer); },
+        clearLayers() { layerCalls.clearedCount++; }
+    };
+
+    const mockMap = {
+        setView(center, zoom) { mapCalls.setView.push({ center, zoom }); },
+        flyTo(center, zoom) { mapCalls.flyTo.push({ center, zoom }); },
+        fitBounds(bounds, opts) { mapCalls.fitBounds.push({ bounds, opts }); },
+        hasLayer() { return true; }
+    };
+
+    const L = {
+        tileLayer: (url) => {
+            const layer = { url };
+            mapCalls.tileLayers.push(layer);
+            return layer;
+        },
+        map: (id, options) => {
+            mapCalls.initialLayers = options.layers;
+            return mockMap;
+        },
+        control: { layers: () => ({ addTo: () => ({}) }) },
+        LayerGroup: function () { return mockLayerGroup; },
+        marker: (latLng) => createMockMarker(latLng),
+        latLngBounds: (latLngs) => ({ latLngs })
+    };
+
+    const moment = (value) => {
+        const api = {
+            tz(zone) {
+                return { format: () => `${value} [${zone}]` };
+            },
+            format() {
+                return `${value}`;
+            }
         };
-    }
+        return api;
+    };
 
-    function markersUser(ajaxResponse) {
-        if (isFetchingMarkers) {
-            return;
-        }
-        isFetchingMarkers = true;
-
-        const res = ajaxResponse;
-        const currentIds = {};
-        const latLngs = [];
-
-        if (res && res.data && Array.isArray(res.data)) {
-            res.data.forEach((val, idx) => {
-                if (
-                    val &&
-                    val.position &&
-                    (typeof val.position.latitude === 'number' ||
-                        (typeof val.position.latitude === 'string' && val.position.latitude.trim() !== '')) &&
-                    (typeof val.position.longitude === 'number' ||
-                        (typeof val.position.longitude === 'string' && val.position.longitude.trim() !== ''))
-                ) {
-                    const lat = Number(val.position.latitude);
-                    const lng = Number(val.position.longitude);
-
-                    if (
-                        Number.isFinite(lat) &&
-                        Number.isFinite(lng) &&
-                        lat >= -90 &&
-                        lat <= 90 &&
-                        lng >= -180 &&
-                        lng <= 180
-                    ) {
-                        const deviceId = val.id != null ? val.id : (val.position && val.position.id ? val.position.id : idx);
-                        currentIds[deviceId] = true;
-
-                        const formattedTime = val.position.created_at || '';
-                        const popupContent = createPopupContent(val.name, formattedTime);
-
-                        if (markersById[deviceId]) {
-                            const existingMarker = markersById[deviceId];
-                            const currentLatLng = existingMarker.getLatLng();
-                            if (currentLatLng.lat !== lat || currentLatLng.lng !== lng) {
-                                existingMarker.setLatLng([lat, lng]);
-                            }
-                            existingMarker.setPopupContent(popupContent);
-                        } else {
-                            const marker = createMockMarker([lat, lng])
-                                .bindPopup(popupContent);
-                            mockMarkersLayer.addLayer(marker);
-                            markersById[deviceId] = marker;
-                        }
-
-                        latLngs.push([lat, lng]);
-                    }
+    const document = {
+        hidden: false,
+        createElement(tag) {
+            return {
+                tagName: tag.toUpperCase(),
+                children: [],
+                appendChild(child) {
+                    this.children.push(child);
+                    return child;
                 }
-            });
+            };
+        },
+        createTextNode(text) {
+            return { nodeType: 3, textContent: String(text) };
+        },
+        addEventListener(evt, handler) {
+            documentListeners[evt] = documentListeners[evt] || [];
+            documentListeners[evt].push(handler);
+        },
+        dispatchVisibilityChange(hiddenValue) {
+            this.hidden = hiddenValue;
+            (documentListeners.visibilitychange || []).forEach((fn) => fn());
         }
+    };
 
-        Object.keys(markersById).forEach(id => {
-            if (!currentIds[id]) {
-                mockMarkersLayer.removeLayer(markersById[id]);
-                delete markersById[id];
+    const windowObj = {
+        addEventListener(evt, handler) {
+            windowListeners[evt] = windowListeners[evt] || [];
+            windowListeners[evt].push(handler);
+        },
+        dispatchEvent(evt) {
+            (windowListeners[evt] || []).forEach((fn) => fn());
+        }
+    };
+
+    const $ = (arg) => {
+        if (arg === document) {
+            return {
+                ready(fn) {
+                    readyCallback = fn;
+                }
+            };
+        }
+        return {};
+    };
+
+    $.each = (items, cb) => {
+        if (Array.isArray(items)) {
+            items.forEach((v, i) => cb(i, v));
+        } else if (items && typeof items === 'object') {
+            Object.keys(items).forEach((k) => cb(k, items[k]));
+        }
+    };
+
+    $.ajax = (opts) => {
+        const xhr = {
+            aborted: false,
+            abortCount: 0,
+            opts,
+            abort() {
+                this.abortCount++;
+                this.aborted = true;
+                if (typeof opts.error === 'function') {
+                    opts.error(this, 'abort');
+                }
+                if (typeof opts.complete === 'function') {
+                    opts.complete(this, 'abort');
+                }
+            },
+            resolveSuccess(res) {
+                if (typeof opts.success === 'function') {
+                    opts.success(res);
+                }
+                if (typeof opts.complete === 'function') {
+                    opts.complete(this, 'success');
+                }
+            },
+            rejectError(status, textStatus = 'error', responseText = '', contentType = 'application/json') {
+                this.status = status;
+                this.responseText = responseText;
+                this.getResponseHeader = (name) => {
+                    if (String(name).toLowerCase() === 'content-type') {
+                        return contentType;
+                    }
+                    return null;
+                };
+                if (typeof opts.error === 'function') {
+                    opts.error(this, textStatus);
+                }
+                if (typeof opts.complete === 'function') {
+                    opts.complete(this, textStatus);
+                }
             }
-        });
+        };
+        ajaxCalls.push(xhr);
+        return xhr;
+    };
 
-        if (isInitialLoad) {
-            if (latLngs.length === 0) {
-                mockMap.setView([-25.2744, 133.7751], 4);
-            } else if (latLngs.length === 1) {
-                mockMap.flyTo(latLngs[0], 14);
-            } else {
-                mockMap.fitBounds(latLngs, { padding: [50, 50], maxZoom: 16 });
+    const toastr = {
+        error(message, title, opts) {
+            toastrCalls.push({ level: 'error', message, title, opts });
+        },
+        success(message, title, opts) {
+            toastrCalls.push({ level: 'success', message, title, opts });
+        }
+    };
+
+    const setIntervalStub = (fn, ms) => {
+        const id = timerSeq++;
+        intervals.set(id, { fn, ms });
+        return id;
+    };
+
+    const clearIntervalStub = (id) => {
+        clearIntervalCalls.push(id);
+        intervals.delete(id);
+    };
+
+    const context = vm.createContext({
+        $,
+        L,
+        moment,
+        toastr,
+        document,
+        window: windowObj,
+        setInterval: setIntervalStub,
+        clearInterval: clearIntervalStub,
+        Array,
+        Number,
+        Object,
+        String
+    });
+
+    const scriptCode = extractDashboardScript(dashboardBladeSource);
+    vm.runInContext(scriptCode, context);
+
+    return {
+        context,
+        document,
+        window: windowObj,
+        intervals,
+        clearIntervalCalls,
+        toastrCalls,
+        ajaxCalls,
+        createdMarkers,
+        mapCalls,
+        layerCalls,
+        triggerReady() {
+            if (readyCallback) readyCallback();
+        },
+        tickInterval() {
+            const entries = Array.from(intervals.values());
+            entries.forEach((item) => item.fn());
+        },
+        cleanup() {
+            if (typeof context.stopMarkersPolling === 'function') {
+                context.stopMarkersPolling();
             }
-            isInitialLoad = false;
+            intervals.clear();
         }
+    };
+}
 
-        isFetchingMarkers = false;
-        activeMarkersXhr = null;
-    }
-
-    function stopMarkersPolling() {
-        if (markersTimer) {
-            clearInterval(markersTimer);
-            markersTimer = null;
-        }
-        if (activeMarkersXhr && typeof activeMarkersXhr.abort === 'function') {
-            activeMarkersXhr.abort();
-            activeMarkersXhr = null;
-        }
-        isFetchingMarkers = false;
-    }
-
-    function startMarkersPolling(timerCallback) {
-        stopMarkersPolling();
-        markersTimer = setInterval(timerCallback, pollIntervalMs);
-    }
+describe('Dashboard Markers Real Blade JS Behavior', () => {
+    let harness;
 
     beforeEach(() => {
-        setupEnvironment();
+        harness = createDashboardHarness();
     });
 
     afterEach(() => {
-        stopMarkersPolling();
+        harness.cleanup();
     });
 
-    test('Initial load fits bounds, subsequent interval update preserves viewport', () => {
-        const initialData = {
-            data: [
-                { id: 1, name: 'Device 1', position: { latitude: -31.95, longitude: 115.86, created_at: '2026-11-06 10:00' } },
-                { id: 2, name: 'Device 2', position: { latitude: -33.86, longitude: 151.20, created_at: '2026-11-06 10:00' } }
-            ]
-        };
+    test('Initial map keeps Google Satellites as the sole active base layer over HTTPS with English locale', () => {
+        assert.strictEqual(harness.mapCalls.initialLayers.length, 1);
+        assert.match(harness.mapCalls.initialLayers[0].url, /^https:\/\/\{s\}\.google\.com\/vt\/lyrs=s,h/);
+        assert.match(harness.mapCalls.initialLayers[0].url, /[?&]hl=en(?:&|$)/);
 
-        // 1. Initial load
-        markersUser(initialData);
+        const googleTileUrls = harness.mapCalls.tileLayers
+            .map((layer) => layer.url)
+            .filter((url) => url.includes('google.com/vt'));
 
-        assert.strictEqual(mockMap.fitBoundsCalls.length, 1, 'Initial load must call fitBounds once');
-        assert.strictEqual(isInitialLoad, false, 'isInitialLoad must be false after first call');
-        assert.strictEqual(mockMarkersLayer.clearLayersCalls, 0, 'Must NOT clear layers');
-        assert.strictEqual(mockMarkersLayer.layers.length, 2);
-
-        // 2. Subsequent interval update
-        const updatedData = {
-            data: [
-                { id: 1, name: 'Device 1', position: { latitude: -31.96, longitude: 115.87, created_at: '2026-11-06 10:01' } },
-                { id: 2, name: 'Device 2', position: { latitude: -33.87, longitude: 151.21, created_at: '2026-11-06 10:01' } }
-            ]
-        };
-
-        markersUser(updatedData);
-
-        // Verify viewport wasn't reset
-        assert.strictEqual(mockMap.fitBoundsCalls.length, 1, 'Subsequent poll must NOT call fitBounds');
-        assert.strictEqual(mockMap.flyToCalls.length, 0, 'Subsequent poll must NOT call flyTo');
-        assert.strictEqual(mockMap.setViewCalls.length, 0, 'Subsequent poll must NOT call setView');
+        assert.strictEqual(googleTileUrls.length, 3, 'Expected googleTile, googleTerrain, and googleSat layers');
+        googleTileUrls.forEach((url) => {
+            assert.match(url, /^https:\/\//, `Expected HTTPS Google tile URL, got: ${url}`);
+            assert.match(url, /[?&]hl=en(?:&|$)/, `Expected hl=en parameter on Google tile URL, got: ${url}`);
+        });
     });
 
-    test('Existing marker positions and popups update smoothly by device ID and keep open popups open', () => {
-        const data1 = {
+    test('Initial load fits bounds, subsequent updates preserve viewport and open popups, removed devices detach', () => {
+        harness.triggerReady();
+        assert.strictEqual(harness.ajaxCalls.length, 1);
+        assert.strictEqual(harness.intervals.size, 1);
+
+        harness.ajaxCalls[0].resolveSuccess({
             data: [
-                { id: 10, name: 'Unit 10', position: { latitude: -31.95, longitude: 115.86, created_at: '2026-11-06 12:00' } }
+                { id: 1, name: 'Device 1', code: 'Australia/Perth', position: { latitude: -31.95, longitude: 115.86, created_at: '2026-11-06 10:00' } },
+                { id: 2, name: 'Device 2', code: 'Australia/Perth', position: { latitude: -33.86, longitude: 151.20, created_at: '2026-11-06 10:00' } }
             ]
-        };
-
-        markersUser(data1);
-        const marker = markersById[10];
-        assert.ok(marker, 'Marker 10 must exist');
-
-        // User opens the popup
-        marker.openPopup();
-        assert.strictEqual(marker.isPopupOpen(), true, 'Popup should be open');
-        assert.strictEqual(marker.popupContent.formattedTime, '2026-11-06 12:00');
-
-        // Device sends updated coordinates and timestamp
-        const data2 = {
-            data: [
-                { id: 10, name: 'Unit 10', position: { latitude: -31.96, longitude: 115.88, created_at: '2026-11-06 12:05' } }
-            ]
-        };
-
-        markersUser(data2);
-
-        // Verify marker instance was preserved (same object reference)
-        assert.strictEqual(markersById[10], marker, 'Existing marker object reference must be retained');
-        assert.strictEqual(marker.getLatLng().lat, -31.96, 'Latitude must be updated');
-        assert.strictEqual(marker.getLatLng().lng, 115.88, 'Longitude must be updated');
-
-        // Verify popup is STILL open and timestamp was updated
-        assert.strictEqual(marker.isPopupOpen(), true, 'Popup must remain open');
-        assert.strictEqual(marker.popupContent.formattedTime, '2026-11-06 12:05', 'Popup timestamp must be updated');
-    });
-
-    test('Device removal removes marker from layer and dictionary', () => {
-        const data1 = {
-            data: [
-                { id: 1, name: 'Device 1', position: { latitude: -31.95, longitude: 115.86 } },
-                { id: 2, name: 'Device 2', position: { latitude: -33.86, longitude: 151.20 } }
-            ]
-        };
-
-        markersUser(data1);
-        assert.strictEqual(mockMarkersLayer.layers.length, 2);
-
-        // Device 2 goes offline / removed
-        const data2 = {
-            data: [
-                { id: 1, name: 'Device 1', position: { latitude: -31.95, longitude: 115.86 } }
-            ]
-        };
-
-        markersUser(data2);
-        assert.strictEqual(mockMarkersLayer.layers.length, 1);
-        assert.ok(markersById[1]);
-        assert.strictEqual(markersById[2], undefined);
-    });
-
-    test('Polling timer management: starts interval, clears on stop/cleanup, prevents pileups', () => {
-        let callbackFiredCount = 0;
-        startMarkersPolling(() => {
-            callbackFiredCount++;
         });
 
-        assert.ok(markersTimer, 'Interval timer must be active');
+        assert.strictEqual(harness.mapCalls.fitBounds.length, 1);
+        assert.strictEqual(harness.layerCalls.clearedCount, 0);
+        assert.strictEqual(harness.layerCalls.added.length, 2);
 
-        stopMarkersPolling();
-        assert.strictEqual(markersTimer, null, 'Interval timer must be cleared');
+        const marker1 = harness.context.markersById[1];
+        marker1.openPopup();
 
-        // Test in-flight pileup prevention
-        isFetchingMarkers = true;
-        let attemptedFetch = false;
-        if (!isFetchingMarkers) {
-            attemptedFetch = true;
-        }
-        assert.strictEqual(attemptedFetch, false, 'Fetch must be blocked when previous request is still fetching');
+        harness.tickInterval();
+        assert.strictEqual(harness.ajaxCalls.length, 2);
+        harness.ajaxCalls[1].resolveSuccess({
+            data: [
+                { id: 1, name: 'Device 1', code: 'Australia/Perth', position: { latitude: -31.96, longitude: 115.87, created_at: '2026-11-06 10:01' } }
+            ]
+        });
+
+        assert.strictEqual(harness.mapCalls.fitBounds.length, 1, 'Subsequent poll must not re-run fitBounds');
+        assert.strictEqual(harness.context.markersById[1], marker1, 'Existing marker instance must be retained');
+        assert.strictEqual(marker1.getLatLng().lat, -31.96);
+        assert.strictEqual(marker1.isPopupOpen(), true, 'Open popup must remain open');
+        assert.strictEqual(harness.context.markersById[2], undefined, 'Removed device must be deleted');
+        assert.strictEqual(harness.layerCalls.removed.length, 1);
+    });
+
+    test('401 error stops polling, notifies the user, and stays stopped when visibility changes', () => {
+        harness.triggerReady();
+        harness.ajaxCalls[0].rejectError(401, 'error', JSON.stringify({ message: 'Unauthenticated.' }));
+
+        assert.strictEqual(harness.intervals.size, 0);
+        assert.strictEqual(harness.context.isFetchingMarkers, false);
+        assert.strictEqual(harness.toastrCalls.length, 1);
+        assert.strictEqual(harness.toastrCalls[0].level, 'error');
+
+        harness.document.dispatchVisibilityChange(true);
+        harness.document.dispatchVisibilityChange(false);
+        assert.strictEqual(harness.ajaxCalls.length, 1);
+        assert.strictEqual(harness.intervals.size, 0);
+    });
+
+    test('419 CSRF expiration stops polling and notifies the user', () => {
+        harness.triggerReady();
+        harness.ajaxCalls[0].rejectError(419, 'error', 'CSRF token mismatch');
+
+        assert.strictEqual(harness.intervals.size, 0);
+        assert.strictEqual(harness.context.isFetchingMarkers, false);
+        assert.strictEqual(harness.toastrCalls.length, 1);
+        assert.strictEqual(harness.toastrCalls[0].level, 'error');
+    });
+
+    test('parsererror stops polling and notifies the user', () => {
+        harness.triggerReady();
+        harness.ajaxCalls[0].rejectError(200, 'parsererror', '<!DOCTYPE html><html><title>Login</title></html>', 'text/html');
+
+        assert.strictEqual(harness.intervals.size, 0);
+        assert.strictEqual(harness.context.isFetchingMarkers, false);
+        assert.strictEqual(harness.toastrCalls.length, 1);
+        assert.strictEqual(harness.toastrCalls[0].level, 'error');
+    });
+
+    test('Aborted requests are ignored silently without error toast', () => {
+        harness.triggerReady();
+        assert.strictEqual(harness.ajaxCalls.length, 1);
+
+        harness.window.dispatchEvent('pagehide');
+        assert.strictEqual(harness.ajaxCalls[0].abortCount, 1);
+        assert.strictEqual(harness.intervals.size, 0);
+        assert.strictEqual(harness.context.isFetchingMarkers, false);
+        assert.strictEqual(harness.toastrCalls.length, 0, 'Abort must not show error notification');
+    });
+
+    test('Transient 5xx / network timeout errors preserve polling and reset isFetchingMarkers in complete', () => {
+        harness.triggerReady();
+        assert.strictEqual(harness.intervals.size, 1);
+
+        harness.ajaxCalls[0].rejectError(502, 'error', '<html><body>502 Bad Gateway</body></html>', 'text/html');
+        assert.strictEqual(harness.intervals.size, 1, 'Transient 502 must keep polling active');
+        assert.strictEqual(harness.context.isFetchingMarkers, false, 'complete must reset isFetchingMarkers');
+        assert.strictEqual(harness.toastrCalls.length, 0, 'Transient 502 must not stop polling with auth toast');
+
+        // Next tick continues working
+        harness.tickInterval();
+        assert.strictEqual(harness.ajaxCalls.length, 2);
+        harness.ajaxCalls[1].rejectError(0, 'timeout', '');
+        assert.strictEqual(harness.intervals.size, 1, 'Transient timeout must keep polling active');
+        assert.strictEqual(harness.context.isFetchingMarkers, false);
+    });
+
+    test('Page visibility pauses the timer without aborting and resumes without overlapping', () => {
+        harness.triggerReady();
+        assert.strictEqual(harness.intervals.size, 1);
+
+        harness.ajaxCalls[0].resolveSuccess({ data: [] });
+        harness.tickInterval();
+        assert.strictEqual(harness.ajaxCalls.length, 2);
+        assert.strictEqual(harness.context.isFetchingMarkers, true);
+
+        harness.document.dispatchVisibilityChange(true);
+        assert.strictEqual(harness.intervals.size, 0);
+        assert.strictEqual(harness.ajaxCalls[1].abortCount, 0);
+        assert.strictEqual(harness.context.isFetchingMarkers, true);
+
+        harness.document.dispatchVisibilityChange(false);
+        assert.strictEqual(harness.intervals.size, 1);
+        assert.strictEqual(harness.ajaxCalls.length, 2);
+
+        harness.ajaxCalls[1].resolveSuccess({ data: [] });
+        harness.document.dispatchVisibilityChange(true);
+        harness.document.dispatchVisibilityChange(false);
+        assert.strictEqual(harness.ajaxCalls.length, 3);
+        assert.strictEqual(harness.ajaxCalls[2].abortCount, 0);
+    });
+
+    test('refreshMarkers initiates request and restarts timer without self-aborting', () => {
+        harness.triggerReady();
+        const timerBeforeRefresh = [...harness.intervals.keys()][0];
+        harness.context.refreshMarkers();
+        assert.strictEqual(harness.ajaxCalls.length, 1, 'A refresh must not overlap the initial request');
+        assert.strictEqual(harness.ajaxCalls[0].abortCount, 0, 'Refresh must not abort the active XHR');
+        assert.strictEqual(harness.intervals.size, 1, 'Refresh must leave exactly one polling timer');
+        assert.deepStrictEqual(harness.clearIntervalCalls, [timerBeforeRefresh], 'Refresh must reset the existing timer');
+
+        harness.tickInterval();
+        assert.strictEqual(harness.ajaxCalls.length, 1, 'Polling must respect the active request guard');
+
+        harness.ajaxCalls[0].resolveSuccess({ data: [] });
+        harness.context.refreshMarkers();
+        assert.strictEqual(harness.ajaxCalls.length, 2, 'Refresh starts a request once the previous request completes');
+        assert.strictEqual(harness.ajaxCalls[1].abortCount, 0, 'Refresh must not abort its own XHR');
+        assert.strictEqual(harness.intervals.size, 1, 'Repeated refreshes must not create duplicate timers');
     });
 });
-

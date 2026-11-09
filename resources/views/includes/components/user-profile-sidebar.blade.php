@@ -1,6 +1,12 @@
+@php
+    $photo = Auth::user()->photo;
+    $photo = $photo && basename($photo) === $photo && is_file(public_path('dist/profiles/' . $photo))
+        ? $photo
+        : 'default.jpg';
+@endphp
 <div class="">
     <div class="main-menu-header">
-        <img class="img-80 img-radius" src="{{ asset('dist/profiles/'.Auth::user()->photo) }}" alt="User-Profile-Image">
+        <img class="img-80 img-radius" src="{{ asset('dist/profiles/' . $photo) }}" alt="User-Profile-Image">
         <div class="user-details">
             <span id="more-details">{{ Auth::user()->name }}<i class="fa fa-caret-down"></i></span>
         </div>

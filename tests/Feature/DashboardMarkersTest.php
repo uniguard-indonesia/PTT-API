@@ -281,6 +281,35 @@ class DashboardMarkersTest extends TestCase
         $this->assertStringContainsString('pagehide', $content, 'Must clean up on pagehide');
     }
 
+    public function test_dashboard_view_contains_error_handling_and_visibility_pause_contracts(): void
+    {
+        $response = $this->actingAs($this->superAdmin)->get(route('auth.dashboard'));
+
+        $response->assertOk();
+        $content = $response->getContent();
+
+        $this->assertMatchesRegularExpression('/error:\s*function\s*\(\s*xhr\s*,\s*textStatus/', $content, '$.ajax must define error(xhr, textStatus) handler');
+        $this->assertMatchesRegularExpression('/textStatus\s*===\s*[\'"]abort[\'"]/', $content, 'Must ignore aborted polling requests');
+        $this->assertMatchesRegularExpression('/status\s*===\s*401/', $content, 'Must handle 401 session expiration');
+        $this->assertMatchesRegularExpression('/status\s*===\s*419/', $content, 'Must handle 419 CSRF/session expiration');
+        $this->assertMatchesRegularExpression('/textStatus\s*===\s*[\'"]parsererror[\'"]/', $content, 'Must handle parsererror on HTML redirect');
+        $this->assertStringContainsString('visibilitychange', $content, 'Must attach Page Visibility API listener');
+        $this->assertStringContainsString('document.hidden', $content, 'Must check document.hidden state on visibilitychange');
+    }
+
+    public function test_dashboard_map_tiles_use_https_and_english_locale(): void
+    {
+        $response = $this->actingAs($this->superAdmin)->get(route('auth.dashboard'));
+
+        $response->assertOk();
+        $content = $response->getContent();
+
+        $this->assertStringNotContainsString('http://{s}.google.com', $content);
+        $this->assertMatchesRegularExpression('/googleTile\s*=\s*L\.tileLayer\([\'"]https:\/\/\{s\}\.google\.com\/vt\/lyrs=s,h&x=\{x\}&y=\{y\}&z=\{z\}&hl=en[\'"]/', $content);
+        $this->assertMatchesRegularExpression('/googleTerrain\s*=\s*L\.tileLayer\([\'"]https:\/\/\{s\}\.google\.com\/vt\?lyrs=p&x=\{x\}&y=\{y\}&z=\{z\}&hl=en[\'"]/', $content);
+        $this->assertMatchesRegularExpression('/googleSat\s*=\s*L\.tileLayer\([\'"]https:\/\/\{s\}\.google\.com\/vt\?lyrs=s&x=\{x\}&y=\{y\}&z=\{z\}&hl=en[\'"]/', $content);
+    }
+
     public function test_company_admin_cannot_override_company_filter_via_query_parameter(): void
     {
         // Device A in Company A
@@ -405,6 +434,45 @@ class DashboardMarkersTest extends TestCase
         $returnedUserIds = collect($response->json('data'))->pluck('id')->all();
         $this->assertContains($this->companyAdminB->id, $returnedUserIds);
         $this->assertNotContains($this->companyAdminA->id, $returnedUserIds);
+    }
+
+    public function test_super_admin_ignores_non_integer_company_filter_values(): void
+    {
+        $posA = Position::create([
+            'user_id' => $this->companyAdminA->id,
+            'latitude' => '-31.9505',
+            'longitude' => '115.8605',
+        ]);
+        $this->companyAdminA->update(['position_id' => $posA->id]);
+
+        $posB = Position::create([
+            'user_id' => $this->companyAdminB->id,
+            'latitude' => '-33.8688',
+            'longitude' => '151.2093',
+        ]);
+        $this->companyAdminB->update(['position_id' => $posB->id]);
+
+        $invalidCompanyIds = [
+            '0',
+            '-1',
+            '1.5',
+            '1e2',
+            'abc',
+            ['1'],
+            $this->companyA->id . '.5',
+            $this->companyA->id . 'e0',
+        ];
+
+        foreach ($invalidCompanyIds as $companyId) {
+            $response = $this->actingAs($this->superAdmin)->getJson(
+                route('auth.dashboard.markers', ['company_id' => $companyId])
+            );
+
+            $response->assertOk();
+            $returnedUserIds = collect($response->json('data'))->pluck('id')->all();
+            $this->assertContains($this->companyAdminA->id, $returnedUserIds);
+            $this->assertContains($this->companyAdminB->id, $returnedUserIds);
+        }
     }
 
     public function test_unauthenticated_request_to_markers_is_rejected(): void
