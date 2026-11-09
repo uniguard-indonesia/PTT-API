@@ -38,7 +38,12 @@
             }
         });
         var Table = $('#daTable').DataTable({
-            ajax: "{{ route('admin.log-activity.index') }}",
+            ajax: {
+                url: "{{ route('admin.log-activity.index') }}",
+                data: function (d) {
+                    d.company_id = $('#Company').val();
+                }
+            },
             processing: true,
             serverSide: true,
             responsive: true,
@@ -46,10 +51,14 @@
                     data: 'created_at'
                 },
                 {
-                    data: 'company'
+                    data: 'company',
+                    orderable: false,
+                    searchable: false
                 },
                 {
-                    data: 'name'
+                    data: 'name',
+                    orderable: false,
+                    searchable: false
                 },
                 {
                     data: 'activity'
@@ -57,6 +66,8 @@
                 {
                     data: 'attachment',
                     name: 'attachment',
+                    orderable: false,
+                    searchable: false,
                     render: function(data, type, row, meta) {
                         if (data !== null) {
                             let fileType = data.split(".");
@@ -123,7 +134,22 @@
             let asset_url = "{{ asset(':attachment') }}";
             return asset_url.replace(':attachment', title);
         }
-        $(document).ready(function() {})
+
+        $(document).ready(function() {
+            $('#Company').on('change', function() {
+                Table.ajax.reload();
+            });
+
+            $('#btnFilter').on('click', function() {
+                Table.ajax.reload();
+            });
+
+            $('#btnClear').on('click', function() {
+                $('#Company').val('');
+                $('input[type="date"]').val('');
+                Table.ajax.reload();
+            });
+        });
     </script>
 @endpush
 @section('content')
@@ -143,11 +169,16 @@
                                     <div class="row justify-content-end mb-3">
                                         <div class="col-md-10 ml-auto">
                                             <div class="row">
-                                                <div class="col">
-                                                    <select name="company_id" id="Company" class="form-control mr-2">
-                                                        <option value="HMV">HMV</option>
-                                                    </select>
-                                                </div>
+                                                @if (Auth::user()->isSuperAdmin())
+                                                    <div class="col-md-3">
+                                                        <select name="company_id" id="Company" class="form-control mr-2">
+                                                            <option value="">All Companies</option>
+                                                            @foreach ($companies as $company)
+                                                                <option value="{{ $company->id }}">{{ $company->name }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                @endif
                                                 <div class="col">
                                                     <div class="input-group mb-3">
                                                         <input type="date" class="form-control">
@@ -159,8 +190,8 @@
                                                 </div>
                                                 <div class="col">
                                                     <div class="btn-group">
-                                                        <button class="btn btn-primary">Filter</button>
-                                                        <button class="btn btn-danger">Clear</button>
+                                                        <button class="btn btn-primary" id="btnFilter">Filter</button>
+                                                        <button class="btn btn-danger" id="btnClear">Clear</button>
                                                     </div>
                                                 </div>
                                             </div>

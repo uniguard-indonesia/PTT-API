@@ -157,8 +157,8 @@
                 text: "Data will removed permanently!",
                 type: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Hapus!',
-                cancelButtonText: 'Batal',
+                confirmButtonText: 'Delete',
+                cancelButtonText: 'Cancel',
                 confirmButtonColor: '#F44336',
                 reverseButtons: true
             }).then((isConfirm) => {
