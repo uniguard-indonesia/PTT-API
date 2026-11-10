@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Helper;
 use App\Models\Company;
 use App\Models\Server;
 use App\Models\User;
@@ -88,6 +89,12 @@ class DashboardController extends Controller
         }
 
         $data = $query->get();
+        $data->transform(function ($item) {
+            if (!empty($item->code)) {
+                $item->code = Helper::sanitizeTimezone($item->code);
+            }
+            return $item;
+        });
 
         return response()->json(
             [

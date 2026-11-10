@@ -7,6 +7,7 @@ use App\Models\Level;
 use App\Models\Position;
 use App\Models\Timezone;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
@@ -480,5 +481,80 @@ class DashboardMarkersTest extends TestCase
         $response = $this->getJson(route('auth.dashboard.markers'));
 
         $response->assertStatus(401);
+    }
+
+    public function test_dashboard_view_contains_default_checked_stale_pin_filter_checkbox(): void
+    {
+        $response = $this->actingAs($this->superAdmin)->get(route('auth.dashboard'));
+
+        $response->assertOk()
+            ->assertViewIs('pages.dashboard');
+
+        $content = $response->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/<div\b[^>]*class=["\'][^"\']*\bform-check\b[^"\']*["\'][^>]*>/',
+            $content,
+            'Dashboard card header must use Bootstrap 4 .form-check markup for the stale pin filter'
+        );
+
+        $this->assertMatchesRegularExpression(
+            '/<input\b(?=[^>]*\btype=["\']checkbox["\'])(?=[^>]*\bid=["\']hideStalePinsCheckbox["\'])(?=[^>]*\bchecked\b)[^>]*>/',
+            $content,
+            'Stale pin filter checkbox must exist with id="hideStalePinsCheckbox" and be checked by default'
+        );
+
+        $this->assertMatchesRegularExpression(
+            '/<label\b[^>]*\bfor=["\']hideStalePinsCheckbox["\'][^>]*>[^<]*older than 1 month[^<]*<\/label>/i',
+            $content,
+            'Stale pin filter checkbox must have an accessible <label for="hideStalePinsCheckbox">'
+        );
+    }
+
+    public function test_markers_endpoint_returns_positions_with_created_at_regardless_of_age(): void
+    {
+        $recentPos = Position::create([
+            'user_id' => $this->companyAdminA->id,
+            'latitude' => '-31.9505',
+            'longitude' => '115.8605',
+            'created_at' => now()->subDays(3),
+            'updated_at' => now()->subDays(3),
+        ]);
+        $this->companyAdminA->update(['position_id' => $recentPos->id]);
+
+        $staleTimestamp = now()->subDays(45);
+        $stalePos = Position::create([
+            'user_id' => $this->regularUserA->id,
+            'latitude' => '-31.9600',
+            'longitude' => '115.8700',
+            'created_at' => $staleTimestamp,
+            'updated_at' => $staleTimestamp,
+        ]);
+        $this->regularUserA->update(['position_id' => $stalePos->id]);
+
+        $otherCompanyStalePos = Position::create([
+            'user_id' => $this->companyAdminB->id,
+            'latitude' => '-33.8688',
+            'longitude' => '151.2093',
+            'created_at' => $staleTimestamp,
+            'updated_at' => $staleTimestamp,
+        ]);
+        $this->companyAdminB->update(['position_id' => $otherCompanyStalePos->id]);
+
+        $this->assertTrue($stalePos->fresh()->created_at->lt(now()->subMonth()));
+
+        $response = $this->actingAs($this->companyAdminA)->getJson(route('auth.dashboard.markers'));
+
+        $response->assertOk()
+            ->assertJson(['status' => 'success']);
+
+        $itemsById = collect($response->json('data'))->keyBy('id');
+        $this->assertTrue($itemsById->has($this->companyAdminA->id), 'Recent pin must be returned');
+        $this->assertTrue($itemsById->has($this->regularUserA->id), 'Older pin in same company must still be returned by the API so UI toggle can reveal it');
+        $this->assertFalse($itemsById->has($this->companyAdminB->id), 'Older pin from another company must remain isolated');
+
+        $returnedStaleCreatedAt = $itemsById->get($this->regularUserA->id)['position']['created_at'] ?? null;
+        $this->assertNotEmpty($returnedStaleCreatedAt);
+        $this->assertTrue(Carbon::parse($returnedStaleCreatedAt)->lt(now()->subMonth()));
     }
 }
