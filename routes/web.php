@@ -95,5 +95,9 @@ Route::middleware("auth")->group(function () {
                 "log-activity",
                 LogActivitiesController::class,
             )->only(["index"]);
+            Route::get("log-activity/{logActivity}/attachment", [
+                LogActivitiesController::class,
+                "attachment",
+            ])->name("log-activity.attachment");
         });
 });
