@@ -43,10 +43,10 @@
                 }
             @endphp
             <ul class="pcoded-item pcoded-left-item">
-                <li class="{{ (isset($menu['route_name']) ? '' : 'pcoded-hasmenu pcoded-trigger ') . $active }}">
+                <li class="{{ isset($menu['route_name']) ? $active : ('pcoded-hasmenu' . ($active ? ' pcoded-trigger active' : '')) }}">
                     <a href="{{ isset($menu['route_name']) ? route($menu['route_name']) : 'javascript:void(0)' }}"
                         class="waves-effect waves-dark">
-                        <span class="pcoded-micon"><i class="{{ $menu['icon'] }} "></i><b>D</b></span>
+                        <span class="pcoded-micon"><i class="{{ $menu['icon'] }} "></i><b>{{ substr($menu['title'], 0, 1) }}</b></span>
                         <span class="pcoded-mtext">{{ $menu['title'] }}</span>
                         <span class="pcoded-mcaret"></span>
                     </a>

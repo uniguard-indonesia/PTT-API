@@ -14276,6 +14276,7 @@ table.dataTable.dtr-inline.collapsed>tbody>tr>th:first-child:before {
 }
 
 .fixed-button {
+	display: none !important;
 	position: fixed;
 	bottom: 50px;
 	right: 30px;

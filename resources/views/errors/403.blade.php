@@ -43,13 +43,13 @@
                                 <p>Your Role Level doesnt have access to this page.</p>
                                 <form class="mt-5 mb-5">
 
-                                    <div class="text-center mb-4 mt-4"><a href="{{ route('dashboard') }}"
+                                    <div class="text-center mb-4 mt-4"><a href="{{ route('auth.dashboard') }}"
                                             class="btn btn-primary">Go
                                             to Homepage</a>
                                     </div>
                                 </form>
                                 <div class="text-center">
-                                    <p>Copyright © Designed by <a href="">Doorlock</a>
+                                    <p>Copyright © Designed by <a href="javascript:void(0)">PTT UniGuard</a>
                                         {{ date('Y') }}
                                     </p>
                                     <ul class="list-inline">
