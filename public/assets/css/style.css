@@ -4858,6 +4858,10 @@ table tbody .border-bottom-info td {
 	position: relative;
 }
 
+.main-menu .main-menu-header {
+	cursor: pointer;
+}
+
 .main-menu .main-menu-header .user-details #more-details {
 	cursor: pointer;
 }
@@ -5564,6 +5568,7 @@ table tbody .border-bottom-info td {
 	display: none;
 }
 
+.pcoded[theme-layout="vertical"] .pcoded-navbar .pcoded-item .pcoded-hasmenu.pcoded-trigger>.pcoded-submenu,
 .pcoded[theme-layout="vertical"] .pcoded-navbar .pcoded-item .pcoded-hasmenu.pcoded-trigger.active>.pcoded-submenu {
 	display: block;
 }
