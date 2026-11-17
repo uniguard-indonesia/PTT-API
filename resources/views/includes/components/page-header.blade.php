@@ -11,7 +11,7 @@
             <div class="col-md-4">
                 <ul class="breadcrumb">
                     <li class="breadcrumb-item">
-                        <a href=""> <i class="fa fa-home"></i> </a>
+                        <a href="{{ route('auth.dashboard') }}"> <i class="fa fa-home"></i> </a>
                     </li>
                     @foreach (Request::segments() as $item)
                         <li class="breadcrumb-item">

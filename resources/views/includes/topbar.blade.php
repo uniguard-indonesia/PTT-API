@@ -17,7 +17,7 @@
                     </div>
                 </div>
             </div>
-            <a href="index.html">
+            <a href="{{ route('auth.dashboard') }}">
                 <img class="img-fluid" src="{{ asset('dist/images/logo-uniguard.svg') }}" alt="Theme-Logo" width="164" />
             </a>
             <a class="mobile-options waves-effect waves-light">

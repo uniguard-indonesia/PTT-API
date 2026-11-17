@@ -51,8 +51,8 @@ $(document).ready(function() {
         port.toggleClass("full-card");
         $(this).toggleClass("fa-window-restore");
     });
-    $("#more-details").on('click', function() {
-        $(".more-details").slideToggle(500);
+    $(".main-menu-header").on('click', function() {
+        $(".more-details").stop(true, true).slideToggle(300);
     });
     $(".mobile-options").on('click', function() {
         $(".navbar-container .nav-right").slideToggle('slow');
