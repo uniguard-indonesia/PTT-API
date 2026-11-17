@@ -15,7 +15,7 @@
                     </li>
                     @foreach (Request::segments() as $item)
                         <li class="breadcrumb-item">
-                            <a href="#!">{{ ucfirst($item) }}</a>
+                            <a href="#!">{{ $item === 'log-activity' ? 'Activity Log' : ucfirst($item) }}</a>
                         </li>
                     @endforeach
                 </ul>
