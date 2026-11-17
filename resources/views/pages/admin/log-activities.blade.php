@@ -674,7 +674,7 @@
                         if (mainDt && mainDt.buttons && typeof mainDt.buttons.exportInfo === 'function') {
                             return mainDt.buttons.exportInfo(cfg);
                         }
-                        return { title: 'Log Activities', filename: 'Log Activities', messageTop: null, messageBottom: null };
+                        return { title: 'Activity Log', filename: 'Activity Log', messageTop: null, messageBottom: null };
                     },
                     info: function(title, message, time) {
                         if (mainDt && mainDt.buttons && typeof mainDt.buttons.info === 'function') {
@@ -765,12 +765,12 @@
                     const rows = response && Array.isArray(response.data) ? response.data : null;
                     if (!rows) {
                         releaseUiLock(true);
-                        notifyExportFeedback('error', 'Failed to export log activities: invalid server response.');
+                        notifyExportFeedback('error', 'Failed to export Activity Log: invalid server response.');
                         return;
                     }
                     if (rows.length === 0) {
                         releaseUiLock(true);
-                        notifyExportFeedback('info', 'No matching log activities found to export.');
+                        notifyExportFeedback('info', 'No matching Activity Log entries found to export.');
                         return;
                     }
 
@@ -794,7 +794,7 @@
                     releaseUiLock(true);
                     const serverMsg = xhr && xhr.responseJSON && typeof xhr.responseJSON.message === 'string' && xhr.responseJSON.message.trim() !== ''
                         ? xhr.responseJSON.message.trim()
-                        : 'Failed to export log activities. Please try again.';
+                        : 'Failed to export Activity Log. Please try again.';
                     notifyExportFeedback('error', serverMsg);
                 }
             });
