@@ -234,7 +234,7 @@ class LogActivitiesController extends Controller
                 : collect();
 
             $data = [
-                'title' => 'Log Activities',
+                'title' => 'Activity Log',
                 'companies' => $companies,
             ];
             return view('pages.admin.log-activities', $data);
@@ -358,7 +358,7 @@ class LogActivitiesController extends Controller
             if ($create) {
                 return response()->json([
                     'status' => 'success',
-                    'message' => 'Log Activity Created'
+                    'message' => 'Activity Log Created'
                 ], 200);
             }
         } catch (\Throwable $e) {
@@ -373,7 +373,7 @@ class LogActivitiesController extends Controller
 
             return response()->json([
                 'status' => 'error',
-                'message' => 'Log Activity failed to create'
+                'message' => 'Activity Log failed to create'
             ], 500);
         }
 
@@ -383,7 +383,7 @@ class LogActivitiesController extends Controller
 
         return response()->json([
             'status' => 'error',
-            'message' => 'Log Activity failed to create'
+            'message' => 'Activity Log failed to create'
         ], 500);
     }
 

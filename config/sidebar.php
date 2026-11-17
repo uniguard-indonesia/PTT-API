@@ -32,7 +32,7 @@ return [
             ]
         ],
         [
-            'title' => 'Log Activity',
+            'title' => 'Activity Log',
             'icon' => 'ti-receipt',
             'route_name' => 'admin.log-activity.index'
         ]

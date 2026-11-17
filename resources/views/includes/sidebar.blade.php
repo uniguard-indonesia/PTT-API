@@ -4,10 +4,14 @@
         @include('includes.components.user-profile-sidebar')
         <div class="pcoded-navigation-label">Navigation</div>
         @php
+            $rawMenus = explode(',', Auth::user()->level->menu ?? '');
+            if (in_array('Log Activity', $rawMenus) && !in_array('Activity Log', $rawMenus)) {
+                $rawMenus[] = 'Activity Log';
+            }
             $menus = collect(config('sidebar.menu'))
                 ->when(
                     !Auth::user()->isSuperAdmin(),
-                    fn($q) => $q->whereIn('title', explode(',', Auth::user()->level->menu ?? ''))
+                    fn($q) => $q->whereIn('title', $rawMenus)
                         ->where('title', '<>', 'Company'),
                     fn($q) => $q->where('title', '<>', 'Account')
                 )
